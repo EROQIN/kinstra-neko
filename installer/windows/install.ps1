@@ -1,6 +1,6 @@
 # Kinstra Neko · Windows 一键安装（PowerShell）
 # 用法（管理员或普通用户均可，Node 装到用户目录不需要管理员）：
-#   irm https://你的分发地址/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/windows/install.ps1 | iex
 # 或：powershell -ExecutionPolicy Bypass -File install.ps1
 #
 # 做的事：Node 22（winget/缺失时引导）→ 全局 DSH → kinstra-neko init →

@@ -10,7 +10,7 @@
 #   6. 注册 systemd 服务 kinstra-neko（开机自启、崩溃重启、Node 内存上限）
 #
 # 用法：
-#   curl -fsSL https://你的分发地址/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/linux/install.sh | sudo bash
 #   # 或下载后：sudo CN_MIRROR=1 bash install.sh
 #
 # 可覆盖变量：DSH_VERSION、KINSTRA_NEKO_SPEC（本地/自定义插件源）、WEB_PORT（默认 3090）、

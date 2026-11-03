@@ -73,7 +73,7 @@ Linux 一键脚本：Node 22、内存不足自动加 2G swap、NapCat 自动托�
 ### 🐧 Linux 云服务器（Ubuntu / Debian，2H2G 友好）
 
 ```bash
-curl -fsSL https://你的分发地址/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/linux/install.sh | sudo bash
 # 国内网络慢可： sudo CN_MIRROR=1 bash install.sh
 ```
 
@@ -82,7 +82,7 @@ curl -fsSL https://你的分发地址/install.sh | sudo bash
 ### 🪟 Windows
 
 ```powershell
-irm https://你的分发地址/install.ps1 | iex
+irm https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/windows/install.ps1 | iex
 ```
 
 Windows 推荐 [SnowLuma](https://github.com/SnowLuma/SnowLuma/releases/latest)（自行下载、本人同意条款后，面板里自动启停与接入小号），同样支持 NapCat 与任意 OneBot v11 实现。
