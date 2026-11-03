@@ -132,18 +132,25 @@ if [ "${SKIP_NAPCAT:-0}" != 1 ]; then
   install -d -o "$RUN_USER" -g "$RUN_USER" "$NAPCAT_DIR/config"
   cat > "$NAPCAT_DIR/run-napcat.sh" <<'RUNEOF'
 #!/usr/bin/env bash
-# Kinstra Neko 调起的 NapCat 启动脚本（由安装器生成；如官方安装器的服务名不同，
-# 本脚本作为兜底：优先用 systemd 服务，否则提示手动启动）。
+# Kinstra Neko 调起的 NapCat 启动脚本（安装器生成的兜底）。
+# 插件在 systemd(kinstra-neko) 里以普通用户 spawn 本脚本，故 sudo 必须 -n 非交互，
+# 否则会卡在密码输入。优先用官方安装器注册的 napcat 系统服务。
 set -e
-if systemctl list-unit-files | grep -q napcat; then
-  sudo systemctl start napcat
+if systemctl list-unit-files 2>/dev/null | grep -q '^napcat'; then
+  if systemctl start napcat 2>/dev/null; then :; else sudo -n systemctl start napcat; fi
+  echo 'napcat 系统服务已启动'
 else
-  echo "未发现 napcat systemd 服务，请用 NapCat 官方方式启动（如 sudo napcat）" >&2
+  echo "未发现 napcat systemd 服务。请用 NapCat 官方方式启动（如 sudo napcat / sudo bash 官方安装脚本），" >&2
+  echo "或在控制台「连接」页改接任意已在跑的 OneBot v11 实现。" >&2
   exit 1
 fi
 RUNEOF
   chmod +x "$NAPCAT_DIR/run-napcat.sh"
   chown -R "$RUN_USER":"$RUN_USER" "$NAPCAT_DIR"
+  # 关键：把真实 NapCat 目录种进插件配置，否则插件 detect() 会回落到
+  # ~/.dsh/plugins-data/kinstra-neko/napcat，与安装目录不一致而判“未安装”。
+  su - "$RUN_USER" -c "pnpm dlx kinstra-neko@latest set-napcat-dir '$NAPCAT_DIR' </dev/null" \
+    || warn '未能把 NapCat 目录写入插件配置，可在面板「连接」页手填：'"$NAPCAT_DIR"
   ok 'NapCat 安装/引导完成（首次需扫码登录小号，见 NapCat 官方输出或面板连接页）'
 fi
 
