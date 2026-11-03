@@ -1,6 +1,6 @@
 {
   "name": "kinstra-neko",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Kinstra Neko —— 住在 QQ 群里的猫娘，基于 DeepSeek Harness 的 OneBot v11 社交陪伴发行版（自部署）",
   "license": "MIT",
   "author": "Kinstra Neko contributors",
