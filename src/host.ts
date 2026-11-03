@@ -1,5 +1,5 @@
 // Kinstra Neko 插件入口（host 半边）：
-//   QQ(NapCat / SnowLuma / 任意 OneBot v11) ⇄ 本插件 ⇄ DSH 猫娘会话
+//   QQ(NapCat / 任意 OneBot v11) ⇄ 本插件 ⇄ DSH 猫娘会话
 // 面板管理 API 挂在 /kinstra/api/*；浏览器半边见 src/client。
 //
 // 安全默认：总开关关、试运行开、白名单空——装好不配置一句话都不会发。
@@ -11,7 +11,6 @@ import { publicConfig, type Config } from './config/schema.js'
 import { createOneBotClient, type OneBotClient } from './onebot/client.js'
 import type { EndpointConfig, OneBotEvent, OneBotState } from './onebot/types.js'
 import { createNapCatManager } from './gateway/napcat.js'
-import { createSnowLumaManager } from './gateway/snowluma.js'
 import { createHub } from './chat/hub.js'
 import { SessionManager } from './sessions/manager.js'
 import { MemoryStore } from './memory/store.js'
@@ -44,27 +43,11 @@ export function apply(ctx: Context) {
     onToken: (token) => configStore.set({ ...getConfig(), napcat: { ...getConfig().napcat, token } }),
     log: logger.child('napcat'),
   })
-  const snowluma = createSnowLumaManager({
-    config: () => getConfig().snowluma,
-    botQQ: () => getConfig().botQQ,
-    savePassword: (pw) => configStore.set({ ...getConfig(), snowluma: { ...getConfig().snowluma, webuiPassword: pw } }),
-    log: logger.child('snowluma'),
-  })
 
   function endpoint(): EndpointConfig {
     const c = getConfig()
     if (c.gateway === 'onebot') {
       return { httpUrl: c.onebot.httpUrl, wsUrl: c.onebot.wsUrl, httpToken: c.onebot.httpToken, wsToken: c.onebot.wsToken }
-    }
-    if (c.gateway === 'snowluma') {
-      const s = c.snowluma
-      if (s.httpUrl || s.wsUrl) return { httpUrl: s.httpUrl, wsUrl: s.wsUrl, httpToken: s.httpToken, wsToken: s.wsToken }
-      try {
-        const auto = snowluma.endpoint()
-        return { httpUrl: auto.httpUrl, wsUrl: auto.wsUrl, httpToken: auto.httpToken, wsToken: auto.wsToken }
-      } catch {
-        return { httpUrl: '', wsUrl: '', httpToken: '', wsToken: '' }
-      }
     }
     return napcat.endpoint()
   }
@@ -108,10 +91,7 @@ export function apply(ctx: Context) {
       if (client.state !== 'connected') return
       const bot = getConfig().botQQ
       if (!uin) { client.stop(); return }
-      if (getConfig().gateway === 'snowluma') {
-        const ok = await snowluma.confirmLogin(uin)
-        if (!ok) { wrongAccount = uin; client.stop(); return }
-      } else if (bot && uin !== bot) {
+      if (bot && uin !== bot) {
         wrongAccount = uin
         client.stop()
         return
@@ -175,16 +155,6 @@ export function apply(ctx: Context) {
           }
         }
       }
-    } else if (c.gateway === 'snowluma') {
-      const inst = snowluma.detect()
-      if (inst.installed && c.snowluma.autoStart && !(await snowluma.running())) {
-        const r = await snowluma.start()
-        if (r.ok) log.info('SnowLuma：' + r.message)
-      }
-      if (c.snowluma.autoAttach && onebotState !== 'connected' && (await snowluma.running()) && Date.now() - snowluma.lastAttach.at > 60_000) {
-        const r = await snowluma.attachBot()
-        log.info('接入机器人号：' + r.message)
-      }
     }
     if (onebot.state === 'stopped') onebot.start()
   }
@@ -194,7 +164,6 @@ export function apply(ctx: Context) {
 
   ctx.effect(() => () => {
     onebot.stop()
-    snowluma.dispose()
     napcat.dispose()
   }, 'kinstra: 收尾')
 
@@ -256,8 +225,7 @@ export function apply(ctx: Context) {
     const after = getConfig()
     if (before.gateway !== after.gateway || before.botQQ !== after.botQQ
       || JSON.stringify(before.onebot) !== JSON.stringify(after.onebot)
-      || JSON.stringify(before.napcat) !== JSON.stringify(after.napcat)
-      || JSON.stringify(before.snowluma) !== JSON.stringify(after.snowluma)) {
+      || JSON.stringify(before.napcat) !== JSON.stringify(after.napcat)) {
       wrongAccount = ''
       onebot.restart()
     }
@@ -296,25 +264,6 @@ export function apply(ctx: Context) {
   })
   route('/napcat/start', async () => napcat.start())
   route('/napcat/stop', async () => napcat.stop())
-
-  route('/snowluma/start', async () => snowluma.start())
-  route('/snowluma/stop', async () => snowluma.stop())
-  route('/snowluma/attach', async () => {
-    wrongAccount = ''
-    snowluma.clearRejected()
-    const r = await snowluma.attachBot()
-    if (getConfig().enabled && onebot.state === 'stopped') onebot.start()
-    return r
-  })
-  route('/snowluma/processes', async () => ({ ok: true, list: await snowluma.processes().catch((e) => { throw new Error((e as Error).message) }) }))
-  route('/snowluma/agreements', async () => {
-    try { return { ok: true, ...(await snowluma.agreements()) } } catch (error) { return { ok: false, message: (error as Error).message } }
-  })
-  route('/snowluma/consent', async (req) => {
-    const b = await readBody(req)
-    if (b.agree !== true) return { ok: false, message: '要先勾选同意' }
-    return snowluma.consent(b.version)
-  })
 
   route('/personas', () => ({ ok: true, list: listPersonas(), current: getConfig().persona.current }))
   route('/persona/get', async (req) => {

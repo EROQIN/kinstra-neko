@@ -34,7 +34,7 @@
     <!-- ② 协议端 -->
     <rect x="180" y="104" width="600" height="56" rx="12" fill="#1a1430" stroke="#a78bfa" stroke-width="1.5"/>
     <text x="208" y="130" font-size="17" font-weight="700" fill="#ddd2ff">OneBot v11 协议端</text>
-    <text x="208" y="150" font-size="12.5" fill="#9486b8">NapCat（自动托管） / SnowLuma（用户自装） · 任意兼容实现</text>
+    <text x="208" y="150" font-size="12.5" fill="#9486b8">NapCat（安装器自动托管） · 任意 OneBot v11 兼容实现</text>
     <text x="752" y="138" text-anchor="end" font-size="12" fill="#a78bfa">②</text>
 
     <line x1="480" y1="162" x2="480" y2="182" stroke="#a78bfa" stroke-width="2" marker-end="url(#ahViolet)"/>

@@ -15,7 +15,7 @@ import { randomBytes } from 'node:crypto'
 import type { EndpointConfig } from '../onebot/types.js'
 import type { Logger } from '../core/logger.js'
 import { dataDir } from '../core/store.js'
-import { gatewayHealthy } from './snowluma.js'
+import { gatewayHealthy } from './health.js'
 
 export interface NapCatConfigView {
   dir: string
@@ -136,7 +136,9 @@ export function createNapCatManager(opts: NapCatManagerOptions) {
     try {
       child = spawn(script, [], {
         cwd: installDir(),
-        windowsHide: true,
+        // Windows 下 NapCat 的扫码二维码打印在它自己的控制台窗口里，必须露窗；
+        // Linux 走 Xvfb/系统服务，无需窗口。
+        windowsHide: process.platform !== 'win32',
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: process.platform === 'win32',
@@ -152,15 +154,29 @@ export function createNapCatManager(opts: NapCatManagerOptions) {
     return { ok: true, message: '已启动' }
   }
 
+  /** 结束 NapCat 进程。Windows 下 spawn(.bat, shell:true) 的 pid 是 cmd.exe，
+   *  只 kill 它会孤儿化 NapCat/QQ，必须 taskkill /T 连整棵进程树一起结束。 */
+  function killTree(me: NonNullable<typeof child>): void {
+    if (process.platform === 'win32') {
+      try {
+        execFileSync('taskkill', ['/pid', String(me.pid), '/T', '/F'], { stdio: 'ignore' })
+        return
+      } catch { /* 兜底再试普通 kill */ }
+    }
+    try { me.kill() } catch { /* ignore */ }
+  }
+
   function stop(): { ok: boolean; message: string } {
     if (!child) return { ok: false, message: '不是插件启动的 NapCat（或已经停了）' }
-    try { child.kill() } catch { /* ignore */ }
+    const me = child
+    child = null
+    killTree(me)
     return { ok: true, message: '已停止' }
   }
 
-  /** 安装器脚本自检：系统里有没有某命令。 */
+  /** 插件卸载/收尾时结束托管进程。 */
   function dispose(): void {
-    try { child?.kill() } catch { /* ignore */ }
+    if (child) { const me = child; child = null; killTree(me) }
   }
 
   return { detect, provision, endpoint, healthy, running, start, stop, dispose, installDir }

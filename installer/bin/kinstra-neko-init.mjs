@@ -4,11 +4,12 @@
 //   npx kinstra-neko init                 # 从 npm 装插件
 //   node kinstra-neko-init.mjs init --link /path/to/kinstra-neko   # 开发/离线本地装
 //   node kinstra-neko-init.mjs doctor     # 环境自检
+//   node kinstra-neko-init.mjs set-napcat-dir <NapCat Shell 目录>  # 安装器种协议端目录
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, writeFileSync, chmodSync, readSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync, chmodSync, readSync, readFileSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 
 const PROFILE = 'kinstra-neko'
 const PKG = 'kinstra-neko'
@@ -36,6 +37,11 @@ function dshHome() {
   return process.env.DSH_HOME || join(homedir(), '.dsh')
 }
 function profileDir() { return join(dshHome(), 'profiles', PROFILE) }
+// 与插件 src/core/store.ts 的 dataDir() 保持一致（同受 KINSTRA_NEKO_DATA_DIR 覆盖）。
+function dataDir(...parts) {
+  const base = process.env.KINSTRA_NEKO_DATA_DIR || join(dshHome(), 'plugins-data', 'kinstra-neko')
+  return join(base, ...parts)
+}
 
 function nodeOk() {
   const m = process.versions.node.split('.').map(Number)
@@ -76,6 +82,28 @@ function cmdDoctor() {
 
   console.log()
   if (!good) { say('先处理上面的问题，再跑 init。'); process.exitCode = 1 }
+}
+
+// 安装器在装好官方 NapCat 一键包、拿到真实 Shell 目录后调用：
+// 把该目录幂等地写进插件 config.json 的 napcat.dir，并把 gateway 固定为 napcat。
+// 可独立重复运行；插件尚未首次启动（config.json 不存在）也能用——缺的字段插件启动时按默认补齐。
+function cmdSetNapcatDir(dirArg) {
+  const dir = (dirArg || process.env.KINSTRA_NEKO_NAPCAT_DIR || '').trim()
+  if (!dir) { fail('用法：kinstra-neko set-napcat-dir <NapCat Shell 目录>（或设 KINSTRA_NEKO_NAPCAT_DIR）'); process.exit(1) }
+  if (!existsSync(dir)) { fail(`目录不存在：${dir}`); process.exit(1) }
+
+  const file = dataDir('config.json')
+  let cfg = {}
+  try { cfg = JSON.parse(readFileSync(file, 'utf8')) } catch { cfg = {} }
+  cfg.gateway = 'napcat'
+  cfg.napcat = { ...(cfg.napcat && typeof cfg.napcat === 'object' ? cfg.napcat : {}), dir }
+
+  mkdirSync(dirname(file), { recursive: true })
+  const tmp = `${file}.tmp-${process.pid}`
+  writeFileSync(tmp, JSON.stringify(cfg, null, 2), 'utf8')
+  renameSync(tmp, file)
+  ok(`已把 NapCat 目录写入配置：${dir}`)
+  ok(`配置文件：${file}`)
 }
 
 function cmdInit(options) {
@@ -136,9 +164,14 @@ function cmdInit(options) {
 
 // —— 入口 ——
 const [,, command, ...rest] = process.argv
-const options = { link: undefined }
-for (let i = 0; i < rest.length; i++) {
-  if (rest[i] === '--link') options.link = rest[++i]
+if (command === 'doctor') {
+  cmdDoctor()
+} else if (command === 'set-napcat-dir') {
+  cmdSetNapcatDir(rest[0])
+} else {
+  const options = { link: undefined }
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--link') options.link = rest[++i]
+  }
+  cmdInit(options)
 }
-if (command === 'doctor') cmdDoctor()
-else cmdInit(options)

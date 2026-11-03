@@ -26,21 +26,9 @@ export const ConfigSchema = z.object({
     groups: qqList,
   }),
 
-  gateway: z.enum(['napcat', 'snowluma', 'onebot']),
+  gateway: z.enum(['napcat', 'onebot']),
 
   onebot: z.object({
-    httpUrl: z.string(),
-    wsUrl: z.string(),
-    httpToken: z.string(),
-    wsToken: z.string(),
-  }),
-
-  snowluma: z.object({
-    dir: z.string(),
-    autoStart: z.boolean(),
-    autoAttach: z.boolean(),
-    webuiPort: z.number().int().min(1).max(65535),
-    webuiPassword: z.string(),
     httpUrl: z.string(),
     wsUrl: z.string(),
     httpToken: z.string(),
@@ -127,10 +115,6 @@ export const DEFAULTS = {
   allow: { private: [], groups: [] },
   gateway: 'napcat' as const,
   onebot: { httpUrl: '', wsUrl: '', httpToken: '', wsToken: '' },
-  snowluma: {
-    dir: '', autoStart: true, autoAttach: true, webuiPort: 5099, webuiPassword: '',
-    httpUrl: '', wsUrl: '', httpToken: '', wsToken: '',
-  },
   napcat: { dir: '', httpPort: 3000, wsPort: 3001, token: '' },
   workspaceDir: '',
   model: { provider: '', model: '', reasoningEffort: 'low', vision: 'auto' as const },
@@ -186,7 +170,9 @@ export function normalize(raw: unknown): Config {
   if (typeof r.botQQ === 'string') fallback.botQQ = String(r.botQQ).replace(/\D/g, '')
   if (typeof r.ownerQQ === 'string') fallback.ownerQQ = String(r.ownerQQ).replace(/\D/g, '')
   if (typeof r.ownerName === 'string' && r.ownerName.trim()) fallback.ownerName = r.ownerName
-  if (r.gateway === 'napcat' || r.gateway === 'snowluma' || r.gateway === 'onebot') fallback.gateway = r.gateway
+  // 旧版本可能写过已移除的 gateway（如 'snowluma'）：不在白名单内就回落默认 'napcat'，
+  // 绝不把非法枚举塞回 schema（否则 parse 抛异常、插件无法启动）。
+  if (r.gateway === 'napcat' || r.gateway === 'onebot') fallback.gateway = r.gateway
   if (typeof r.workspaceDir === 'string') fallback.workspaceDir = r.workspaceDir
   if (isObj(r.persona) && typeof r.persona.current === 'string') fallback.persona = { current: r.persona.current }
   if (isObj(r.allow) && Array.isArray(r.allow.groups)) fallback.allow = r.allow
@@ -197,9 +183,6 @@ export function normalize(raw: unknown): Config {
 export const SECRET_PATHS: ReadonlyArray<readonly [string, string]> = [
   ['onebot', 'httpToken'],
   ['onebot', 'wsToken'],
-  ['snowluma', 'webuiPassword'],
-  ['snowluma', 'httpToken'],
-  ['snowluma', 'wsToken'],
   ['napcat', 'token'],
 ]
 

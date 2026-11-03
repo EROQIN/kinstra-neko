@@ -55,7 +55,7 @@
 </td>
 <td width="50%" valign="top">
 <h4>📦 一条命令装完，无 Docker</h4>
-Linux 一键脚本：Node 22、内存不足自动加 2G swap、NapCat 自动托管、systemd 守护（开机自启、崩溃重启、700MB 内存上限）；Windows 引导脚本 + 桌面快捷方式。用户只需扫码登录小号、粘贴模型 API Key。
+Linux 一键脚本：Node 22、内存不足自动加 2G swap、NapCat 自动托管、systemd 守护（开机自启、崩溃重启、700MB 内存上限）；Windows 自动下载运行 NapCat 官方一键包（连 QQ 一起装好）+ 桌面快捷方式。用户只需扫码登录小号、粘贴模型 API Key。
 </td>
 </tr>
 </table>
@@ -63,7 +63,7 @@ Linux 一键脚本：Node 22、内存不足自动加 2G swap、NapCat 自动托�
 ### 它有意不做
 
 - **不内置 TTS 语音、翻唱、视频等重模块** —— 保持 2G 可跑、行为可预期；后续作为可选模块提供。
-- **不打包、不自动下载 SnowLuma** —— 其 EULA 要求用户自行安装并同意条款；插件只在你装好后接管，并只注入核对过的机器人小号。
+- **不 fork、不镜像、不分发 NapCat** —— 安装器只在你的机器上从官方 release 获取并运行 NapCat 官方一键包（自动部署 QQ 与 NapCat，无需预装 QQ），不把它打进本项目产物；NapCat 自身遵循其许可证与条款。
 - **不 fork DSH 内核** —— 本项目是一个 DSH bundle 插件，内核随 npm 官方源独立更新。
 
 ---
@@ -85,7 +85,7 @@ curl -fsSL https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/
 irm https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/windows/install.ps1 | iex
 ```
 
-Windows 推荐 [SnowLuma](https://github.com/SnowLuma/SnowLuma/releases/latest)（自行下载、本人同意条款后，面板里自动启停与接入小号），同样支持 NapCat 与任意 OneBot v11 实现。
+脚本会自动下载运行 NapCat 官方一键包（`NapCat.Shell.Windows.OneKey`，连 QQNT 一起装好，无需预装 QQ），并把 NapCat 目录、`run-napcat.bat` 薄壳与 OneBot 配置都准备好；也支持在「连接」页改接任意 OneBot v11 实现。
 
 ### 🧑‍💻 已有 Node 环境，只想装插件
 
@@ -98,7 +98,7 @@ dsh --profile kinstra-neko web --port 3090
 
 1. 浏览器打开 `http://127.0.0.1:3090`（云服务器用 `http://<IP>:3090`，注意安全组放行）。
 2. 按向导填：**猫娘小号 QQ**、**你的 QQ（主人）**。
-3. 在 NapCat / SnowLuma 用小号扫码登录；连接页核对登录号与配置一致。
+3. 在「连接」页点「生成 OneBot 配置」再点「启动 NapCat」，用猫娘小号扫弹出窗口里的二维码登录；插件会自动核对登录号与配置是否一致。
 4. 在 DSH 设置里配置模型服务商与 API Key（DeepSeek 官方或任意 OpenAI 兼容端点）。
 5. 在「群聊与权限」里加白名单群。
 6. **保持试运行**，在群里 @ 她，到面板「试运行」页看她本来会说什么；确认对味，再关试运行开麦。
@@ -134,7 +134,7 @@ DSH 支持 DeepSeek 官方与任意 OpenAI 兼容网关。密钥写 `~/.dsh/.cre
 
 ```
 QQ 小号
-  ▲  OneBot v11（NapCat / SnowLuma / 任意实现；WS 收事件 + HTTP 调接口）
+  ▲  OneBot v11（NapCat 安装器自动托管 / 任意兼容实现；WS 收事件 + HTTP 调接口）
 src/onebot, src/gateway
   ▼
 chat hub（白名单 → 群聊决策 → 停顿分段 → 引用/@/拍一拍）
@@ -154,7 +154,7 @@ DSH Session（一群一会话，kinstra-social / kinstra-private 两个 preset�
 | `src/memory/store.ts` | JSONL + 热群 LRU 倒排索引、BM25、遗忘曲线、人物档案 |
 | `src/persona` | Markdown 人格卡 CRUD、社交/私聊输出规则 |
 | `src/sessions` | DSH 会话生命周期与记忆工具（`kinstra_remember` / `kinstra_recall`） |
-| `src/gateway` | NapCat 托管（loopback + 令牌）与 SnowLuma 合规接管 |
+| `src/gateway` | NapCat 安装目录探测、OneBot 配置生成、进程启停与健康检查（loopback + 令牌） |
 | `src/client` | 品牌插槽、配置面板、首启向导 |
 
 ---

@@ -538,7 +538,7 @@ export function createHub(opts: HubOptions) {
       log.info(`群 ${msg.groupId}：${decision.reason}`)
     }
 
-    // 语音转写：NapCat/SnowLuma 通常已在消息段给出文字；没有文字时尝试 QQ 自带转写
+    // 语音转写：NapCat 通常已在消息段给出文字；没有文字时尝试 QQ 自带转写
     let text = msg.text
     if (!text && msg.records.length) {
       try {
