@@ -138,7 +138,9 @@ if [ "${SKIP_NAPCAT:-0}" != 1 ]; then
     # 下到唯一临时文件再执行：curl -o 直接覆盖一个属主为普通用户的 /tmp 残留会报 write error 23
     # （真机实测），mktemp 新文件可规避；下载失败只跳过 NapCat、不阻断已就绪的核心服务。
     napcat_inst="$(mktemp /tmp/napcat-installer.XXXXXX.sh)"
-    if curl -fsSL "$NAPCAT_INSTALL_URL" -o "$napcat_inst"; then
+    # --retry 让瞬态网络/写错误就地自愈（curl 23 在真机出现过一次），尽量一次装成；
+    # 最终仍失败才降级为跳过 NapCat，不阻断核心控制台。
+    if curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 20 "$NAPCAT_INSTALL_URL" -o "$napcat_inst"; then
       # 以 root 跑（apt 装 Xvfb/依赖免密），但 HOME 指向普通用户家目录：rootless 安装器按
       # $HOME/Napcat 落文件，这样 QQ/NapCat 落在运行用户名下；后面再 chown 兜底归属。
       # 显式参数跳过交互菜单：--docker n 走 Shell、--cli y 装 napcat 命令、--proxy 直连。
