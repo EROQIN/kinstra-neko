@@ -1,0 +1,12 @@
+{
+  "name": "Kinstra Neko",
+  "short_name": "Kinstra Neko",
+  "description": "住在 QQ 群里的猫娘",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#202024",
+  "theme_color": "#ff7eb3",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

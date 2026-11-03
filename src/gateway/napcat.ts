@@ -1,0 +1,177 @@
+// NapCat 托管：一键安装器把 NapCat 装好并生成 run-napcat 脚本；插件负责
+// 生成 OneBot11 网络配置、生成访问令牌、启停脚本、健康检查。
+//
+// 为什么启动委托给脚本：NapCat 各版本（Shell / 桌面注入 / Xvfb）启动方式差异大，
+// 安装时按当版官方文档生成 run-napcat.sh / .bat 最稳，插件不绑死任何一版启动参数。
+//
+// 配置文件（NapCat 4.x 约定）：
+//   <installDir>/config/onebot11_<uin>.json —— 单号 OneBot11 网络配置
+//   <installDir>/config/webui.json          —— WebUI 端口与 token
+
+import { spawn, execFileSync } from 'node:child_process'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
+import { join } from 'node:path'
+import { randomBytes } from 'node:crypto'
+import type { EndpointConfig } from '../onebot/types.js'
+import type { Logger } from '../core/logger.js'
+import { dataDir } from '../core/store.js'
+import { gatewayHealthy } from './snowluma.js'
+
+export interface NapCatConfigView {
+  dir: string
+  httpPort: number
+  wsPort: number
+  token: string
+}
+
+export interface NapCatManagerOptions {
+  config: () => NapCatConfigView
+  botQQ: () => string
+  onToken: (token: string) => void
+  log: Logger
+}
+
+/** 生成 NapCat OneBot11 网络配置（httpServers + wsServers，仅 loopback）。 */
+export function onebotConfigJson(uin: string, cfg: NapCatConfigView): unknown {
+  return {
+    network: {
+      httpServers: [{
+        name: 'kinstra-http', enable: true, host: '127.0.0.1', port: cfg.httpPort,
+        accessToken: cfg.token, debug: false,
+      }],
+      httpClients: [],
+      wsServers: [{
+        name: 'kinstra-ws', enable: true, host: '127.0.0.1', port: cfg.wsPort,
+        accessToken: cfg.token, debug: false,
+      }],
+      wsClients: [],
+    },
+    musicSignUrl: '',
+    enableLocalFile2Url: true,
+    parseMultMsg: false,
+    // 以本号为唯一作用域
+    fileLog: false,
+    consoleLog: true,
+    reportSelfMessage: false,
+    ignoreSelf: true,
+  }
+}
+
+export function createNapCatManager(opts: NapCatManagerOptions) {
+  const log = opts.log
+  let child: ReturnType<typeof spawn> | null = null
+
+  function installDir(): string {
+    return opts.config().dir || dataDir('napcat')
+  }
+
+  function configDir(): string {
+    return join(installDir(), 'config')
+  }
+
+  function runScript(): string {
+    return join(installDir(), process.platform === 'win32' ? 'run-napcat.bat' : 'run-napcat.sh')
+  }
+
+  function detect(): { installed: boolean; reason?: string; dir: string } {
+    const dir = installDir()
+    if (!existsSync(dir)) return { installed: false, reason: 'NapCat 还没安装（在向导里点一键安装）', dir }
+    if (!existsSync(runScript())) return { installed: false, reason: `安装不完整：缺 ${runScript()}（重新跑一次安装）`, dir }
+    return { installed: true, dir }
+  }
+
+  /** 写好该 QQ 号的 OneBot11 配置；没有 token 就生成一个并回存。 */
+  function provision(): EndpointConfig & { found: boolean } {
+    const cfg = opts.config()
+    let token = cfg.token
+    if (!token) {
+      token = randomBytes(16).toString('base64url')
+      opts.onToken(token)
+    }
+    const view = { ...cfg, token }
+    const uin = opts.botQQ()
+    if (uin) {
+      mkdirSync(configDir(), { recursive: true })
+      const file = join(configDir(), `onebot11_${uin}.json`)
+      writeFileSync(file, JSON.stringify(onebotConfigJson(uin, view), null, 2), 'utf8')
+      log.debug(`已写入 NapCat OneBot 配置：${file}`)
+    }
+    return {
+      httpUrl: `http://127.0.0.1:${cfg.httpPort}`,
+      wsUrl: `ws://127.0.0.1:${cfg.wsPort}`,
+      httpToken: token,
+      wsToken: token,
+      found: Boolean(uin),
+    }
+  }
+
+  function endpoint(): EndpointConfig {
+    const cfg = opts.config()
+    return {
+      httpUrl: `http://127.0.0.1:${cfg.httpPort}`,
+      wsUrl: `ws://127.0.0.1:${cfg.wsPort}`,
+      httpToken: cfg.token,
+      wsToken: cfg.token,
+    }
+  }
+
+  async function healthy(): Promise<boolean> {
+    return gatewayHealthy(endpoint())
+  }
+
+  async function running(): Promise<boolean> {
+    if (child) return true
+    return healthy()
+  }
+
+  async function start(): Promise<{ ok: boolean; message: string }> {
+    const d = detect()
+    if (!d.installed) return { ok: false, message: d.reason ?? '未安装' }
+    if (await running()) return { ok: true, message: 'NapCat 已经在运行' }
+    provision()
+    const script = runScript()
+    if (process.platform !== 'win32') {
+      try { chmodSync(script, 0o755) } catch { /* ignore */ }
+    }
+    try {
+      child = spawn(script, [], {
+        cwd: installDir(),
+        windowsHide: true,
+        detached: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+      })
+    } catch (error) {
+      return { ok: false, message: `启动失败：${(error as Error).message}` }
+    }
+    const me = child
+    me.stdout?.on('data', (b) => log.debug(String(b).split(/\r?\n/).filter(Boolean).slice(-3).join(' / ')))
+    me.stderr?.on('data', (b) => log.debug(String(b).slice(0, 300)))
+    me.on('exit', (code) => { if (child === me) { log.warn(`NapCat 退出（code ${code}）`); child = null } })
+    log.info(`已启动 NapCat（pid ${me.pid}），首次运行需要在它的窗口里扫码登录小号`)
+    return { ok: true, message: '已启动' }
+  }
+
+  function stop(): { ok: boolean; message: string } {
+    if (!child) return { ok: false, message: '不是插件启动的 NapCat（或已经停了）' }
+    try { child.kill() } catch { /* ignore */ }
+    return { ok: true, message: '已停止' }
+  }
+
+  /** 安装器脚本自检：系统里有没有某命令。 */
+  function dispose(): void {
+    try { child?.kill() } catch { /* ignore */ }
+  }
+
+  return { detect, provision, endpoint, healthy, running, start, stop, dispose, installDir }
+}
+
+export type NapCatManager = ReturnType<typeof createNapCatManager>
+
+/** 系统里有没有某命令（安装器自检用）。 */
+export function hasCommand(cmd: string): boolean {
+  try {
+    execFileSync(process.platform === 'win32' ? 'where' : 'sh', process.platform === 'win32' ? [cmd] : ['-c', `command -v ${cmd}`], { stdio: 'ignore' })
+    return true
+  } catch { return false }
+}
