@@ -119,24 +119,41 @@ su - "$RUN_USER" -c "DSH_VERSION=$DSH_VERSION pnpm dlx kinstra-neko@latest $INIT
 ok '猫娘插件已装入 profile'
 
 # ---------- 5. NapCat（可跳过）----------
+# 真机确认的官方 NapCat Shell(rootless) 布局（NapCat-Installer --docker n）：
+#   $RUN_HOME/Napcat/opt/QQ/qq                                 QQNT 可执行
+#   $RUN_HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat/ NapCat 插件目录（config/ 在此）
+# 启动是 `xvfb-run -a <qq> --no-sandbox`（无头自动起 Xvfb）；官方【不】注册 systemd 服务、
+# 也【不】装 x11vnc，headless 扫码走 NapCat 内置 WebUI（首启后 config/webui.json 出 token，默认 6099）。
 if [ "${SKIP_NAPCAT:-0}" != 1 ]; then
-  say '安装 NapCat（官方 rootless Shell 安装器：Xvfb 里跑 QQNT，扫码走内置 WebUI）…'
-  curl -fsSL "$NAPCAT_INSTALL_URL" -o /tmp/napcat-install.sh
-  # 官方脚本以 root 运行时只用 sudo 装 apt 依赖，产物全部落在 $HOME/Napcat —— 故必须把 HOME
-  # 指到普通用户家目录，否则会装进 /root/Napcat。参数：--docker n 选 Shell 版、--cli y 装
-  # napcat TUI、--proxy 0 直连 GitHub（国内可用 NAPCAT_PROXY 切官方加速档）。脚本无 set -e，
-  # 下载失败不退出，所以下面再用关键产物是否存在兜底判定。
-  HOME="$RUN_HOME" bash /tmp/napcat-install.sh --docker n --cli y --proxy "$NAPCAT_PROXY" \
-    || warn 'NapCat 安装器返回非零（多为网络问题）。可稍后以普通用户重跑官方脚本，或在面板「连接」改接任意 OneBot。'
+  NAPCAT_HOME="$RUN_HOME/Napcat"
+  NAPCAT_QQ="$NAPCAT_HOME/opt/QQ"
+  NAPCAT_DIR="$NAPCAT_QQ/resources/app/app_launcher/napcat"   # config 与 run-napcat.sh 所在，种给插件
+  NAPCAT_QQ_BIN="$NAPCAT_QQ/qq"
 
-  # 官方固定布局：QQ 本体在 ~/Napcat/opt/QQ/qq，NapCat 注入在其 resources/app/app_launcher/napcat，
-  # OneBot/WebUI 配置读 napcat/config/。provision() 也写到这个 config 目录，故 NAPCAT_DIR 必须是它。
-  NAPCAT_DIR="$RUN_HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat"
-  QQ_BIN="$RUN_HOME/Napcat/opt/QQ/qq"
-  if [ -x "$QQ_BIN" ] && [ -d "$NAPCAT_DIR" ]; then
-    # root 跑安装器可能在用户家目录留下 root 属主文件，统一归还，否则插件以普通用户 spawn 时写不进配置。
-    chown -R "$RUN_USER":"$RUN_USER" "$RUN_HOME/Napcat"
-    say "在 $NAPCAT_DIR 准备 OneBot 配置与启动脚本…"
+  if [ -x "$NAPCAT_QQ_BIN" ] && [ -f "$NAPCAT_DIR/napcat.mjs" ]; then
+    # 幂等：已装好就别再下载/重跑官方安装器（重跑几百 MB 且易因 /tmp 残留触发 curl 写错误）。
+    ok "NapCat 已安装：$NAPCAT_HOME（跳过官方安装器）"
+  else
+    say '安装 NapCat（官方 NapCat-Installer · rootless Shell：QQNT + NapCat + Xvfb，约几百 MB）…'
+    # 下到唯一临时文件再执行：curl -o 直接覆盖一个属主为普通用户的 /tmp 残留会报 write error 23
+    # （真机实测），mktemp 新文件可规避；下载失败只跳过 NapCat、不阻断已就绪的核心服务。
+    napcat_inst="$(mktemp /tmp/napcat-installer.XXXXXX.sh)"
+    if curl -fsSL "$NAPCAT_INSTALL_URL" -o "$napcat_inst"; then
+      # 以 root 跑（apt 装 Xvfb/依赖免密），但 HOME 指向普通用户家目录：rootless 安装器按
+      # $HOME/Napcat 落文件，这样 QQ/NapCat 落在运行用户名下；后面再 chown 兜底归属。
+      # 显式参数跳过交互菜单：--docker n 走 Shell、--cli y 装 napcat 命令、--proxy 直连。
+      HOME="$RUN_HOME" bash "$napcat_inst" --docker n --cli y --proxy "$NAPCAT_PROXY" \
+        || warn 'NapCat 安装器返回非零（多为网络/版本差异）。可稍后重跑本脚本，或面板「连接」改接任意 OneBot v11。'
+    else
+      warn "下载 NapCat 官方安装器失败（网络受限可设 NAPCAT_INSTALL_URL 指向可达镜像）。跳过 NapCat，核心控制台仍可用。"
+    fi
+    rm -f "$napcat_inst"
+  fi
+
+  if [ -x "$NAPCAT_QQ_BIN" ] && [ -d "$NAPCAT_DIR" ]; then
+    # root 跑安装器可能在用户家目录留下 root 属主文件；插件以普通用户 spawn，要能写
+    # config（onebot11_*.json），NapCat 首启也要写 webui.json/登录态，故整目录归普通用户。
+    chown -R "$RUN_USER":"$RUN_USER" "$NAPCAT_HOME"
     install -d -o "$RUN_USER" -g "$RUN_USER" "$NAPCAT_DIR/config"
     cat > "$NAPCAT_DIR/run-napcat.sh" <<'RUNEOF'
 #!/usr/bin/env bash
@@ -151,15 +168,15 @@ QQ="$(cd "$DIR/../../../.." && pwd)/qq"
 [ -x "$QQ" ] || QQ="$HOME/Napcat/opt/QQ/qq"
 exec xvfb-run -a "$QQ" --no-sandbox "$@"
 RUNEOF
-    chmod +x "$NAPCAT_DIR/run-napcat.sh"
-    chown -R "$RUN_USER":"$RUN_USER" "$NAPCAT_DIR"
-    # 关键：把真实 NapCat 目录种进插件配置，否则插件 detect() 会回落到
-    # ~/.dsh/plugins-data/kinstra-neko/napcat，与安装目录不一致而判“未安装”。
+    chmod 755 "$NAPCAT_DIR/run-napcat.sh"
+    chown "$RUN_USER":"$RUN_USER" "$NAPCAT_DIR/run-napcat.sh"
+    # 关键：把 NapCat 插件目录（config 所在）种进插件配置，否则 detect() 回落到
+    # ~/.dsh/plugins-data/kinstra-neko/napcat，与真实安装目录不一致而判“未安装”。
     su - "$RUN_USER" -c "pnpm dlx kinstra-neko@latest set-napcat-dir '$NAPCAT_DIR' </dev/null" \
       || warn '未能把 NapCat 目录写入插件配置，可在面板「连接」页手填：'"$NAPCAT_DIR"
-    ok 'NapCat 安装完成（首次需经 SSH 隧道打开其 WebUI 扫码登录小号，见下方上线步骤）'
+    ok "NapCat 就绪：$NAPCAT_HOME（首次启动后经 SSH 隧道开 WebUI 扫码，见下方上线步骤）"
   else
-    warn "未找到 $QQ_BIN，NapCat 可能没装完整（多为下载失败）。可重跑本脚本，或在面板「连接」改接任意已在跑的 OneBot v11。"
+    warn "NapCat 似乎没装完整（缺 $NAPCAT_QQ_BIN 或 $NAPCAT_DIR，多为下载失败）。可重跑本脚本，或面板「连接」改接 OneBot。"
   fi
 fi
 
