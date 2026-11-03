@@ -49,22 +49,28 @@ try { dsh --version | Out-Null; Ok "DSH $(dsh --version)" } catch {
   npm install -g "@deepseek-ai/dsh@$DshVersion" --no-audit --no-fund
 }
 
-# 3. 插件初始化
+# 2.5 pnpm：DSH 插件管理器用 pnpm；本生态全是 alpha 预发布版本，npm 严格 peer 会 ERESOLVE，pnpm 只告警。
+try { pnpm --version | Out-Null; Ok "pnpm $(pnpm --version)" } catch {
+  Say '全局安装 pnpm（DSH 插件管理器依赖）…'
+  npm install -g pnpm --no-audit --no-fund
+}
+
+# 3. 插件初始化（用 pnpm dlx，不用 npx：避开 npm 对 alpha peer 的 ERESOLVE）
 Say '初始化 Kinstra Neko …'
 $initArgs = @('init')
 if ($env:KINSTRA_NEKO_SPEC) { $initArgs = @('init', '--link', $env:KINSTRA_NEKO_SPEC) }
 $env:DSH_VERSION = $DshVersion
-npx -y kinstra-neko@latest @initArgs
+pnpm dlx kinstra-neko@latest @initArgs
 if ($LASTEXITCODE -ne 0) { Die '插件初始化失败，检查网络后重试（开发版设 KINSTRA_NEKO_SPEC=本地目录）。' }
 Ok '猫娘插件已装入 profile'
 
-# 调用本包 CLI（npm 源或本地 --link 源），用于把探测到的 NapCat 目录种入插件配置。
+# 调用本包 CLI（pnpm 源或本地 --link 源），用于把探测到的 NapCat 目录种入插件配置。
 function Invoke-KinstraCli([string[]]$CliArgs) {
   if ($env:KINSTRA_NEKO_SPEC) {
     $scriptPath = Join-Path $env:KINSTRA_NEKO_SPEC 'installer\bin\kinstra-neko-init.mjs'
     node $scriptPath @CliArgs
   } else {
-    npx -y kinstra-neko@latest @CliArgs
+    pnpm dlx kinstra-neko@latest @CliArgs
   }
 }
 

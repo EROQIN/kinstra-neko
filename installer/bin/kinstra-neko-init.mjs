@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Kinstra Neko 初始化器：创建独立 DSH profile、装入猫娘 bundle、引导最小配置。
 // 用法：
-//   npx kinstra-neko init                 # 从 npm 装插件
+//   pnpm dlx kinstra-neko init            # 从 npm 装插件（推荐；npm/npx 会因 alpha 严格 peer 报 ERESOLVE）
 //   node kinstra-neko-init.mjs init --link /path/to/kinstra-neko   # 开发/离线本地装
 //   node kinstra-neko-init.mjs doctor     # 环境自检
 //   node kinstra-neko-init.mjs set-napcat-dir <NapCat Shell 目录>  # 安装器种协议端目录

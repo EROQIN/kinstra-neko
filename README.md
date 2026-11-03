@@ -89,8 +89,11 @@ irm https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/windows
 
 ### 🧑‍💻 已有 Node 环境，只想装插件
 
+DSH 是 pnpm 生态（依赖多为 alpha 预发布版本，npm 的严格 peer 校验会报 ERESOLVE），请用 pnpm：
+
 ```bash
-npx kinstra-neko@latest init          # 建 profile、装 bundle、引导写凭据
+npm i -g pnpm                      # 若还没有 pnpm
+pnpm dlx kinstra-neko@latest init  # 建 profile、装 bundle、引导写凭据
 dsh --profile kinstra-neko web --port 3090
 ```
 

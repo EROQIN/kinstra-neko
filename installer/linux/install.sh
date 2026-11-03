@@ -92,11 +92,20 @@ if ! command -v dsh >/dev/null 2>&1; then
 fi
 ok "DSH：$(dsh --version 2>/dev/null || echo 已安装)"
 
+# pnpm：DSH 的 `dsh plugin add` 用 pnpm 装插件，且本生态全是 alpha 预发布版本，
+# npm 的严格 peer 解析会因版本范围（精确 alpha vs ~x.y.z）报 ERESOLVE，pnpm 只告警不阻断。
+if ! command -v pnpm >/dev/null 2>&1; then
+  say '安装 pnpm（DSH 插件管理器依赖）…'
+  npm install -g pnpm --no-audit --no-fund
+fi
+ok "pnpm $(pnpm -v)"
+
 # ---------- 4. Kinstra Neko 插件 ----------
 say '初始化 Kinstra Neko profile 与插件…'
 INIT_ARGS='init'
 [ -n "${KINSTRA_NEKO_SPEC:-}" ] && INIT_ARGS="init --link $KINSTRA_NEKO_SPEC"
-su - "$RUN_USER" -c "DSH_VERSION=$DSH_VERSION npx -y kinstra-neko@latest $INIT_ARGS </dev/tty" || \
+# 用 pnpm dlx 而非 npx：同上，避开 npm 严格 peer 对 alpha 版本的 ERESOLVE。
+su - "$RUN_USER" -c "DSH_VERSION=$DSH_VERSION pnpm dlx kinstra-neko@latest $INIT_ARGS </dev/tty" || \
   die '插件初始化失败（网络问题可重试；开发版可设 KINSTRA_NEKO_SPEC=本地目录）'
 ok '猫娘插件已装入 profile'
 
