@@ -6,7 +6,7 @@
 #   2. Node.js 22（缺失时用 NodeSource；国内可用 CN_MIRROR=1 走镜像）
 #   3. 全局安装 DeepSeek Harness
 #   4. 调 kinstra-neko init 建 profile、装猫娘 bundle
-#   5. 装 NapCat（官方 NapCat-Installer；无桌面环境自动配 Xvfb+x11vnc 扫码）并生成 OneBot 配置
+#   5. 装 NapCat（官方 NapCat-Installer · rootless Shell：Xvfb 里跑 QQNT，扫码走 NapCat 内置 WebUI）并生成 OneBot 配置
 #   6. 注册 systemd 服务 kinstra-neko（开机自启、崩溃重启、Node 内存上限）
 #
 # 用法：
@@ -15,7 +15,7 @@
 #
 # 可覆盖变量：DSH_VERSION、KINSTRA_NEKO_SPEC（本地/自定义插件源）、WEB_PORT（默认 3090）、
 #             WEB_HOST（默认主网卡 IP 供远程访问；设 127.0.0.1 只本机）、
-#             NAPCAT_INSTALL_URL、SKIP_NAPCAT=1
+#             NAPCAT_INSTALL_URL、NAPCAT_PROXY（官方脚本 GitHub 加速选项，0=直连；默认 0）、SKIP_NAPCAT=1
 
 set -euo pipefail
 
@@ -24,7 +24,9 @@ WEB_PORT="${WEB_PORT:-3090}"
 # 默认取主网卡首个 IPv4；只想本机访问可 WEB_HOST=127.0.0.1。
 WEB_HOST="${WEB_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
 DSH_VERSION="${DSH_VERSION:-0.2.1-rc.3}"
-NAPCAT_INSTALL_URL="${NAPCAT_INSTALL_URL:-https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh}"
+# 官方脚本源在 GitHub（NapNeko/NapCat-Installer）；旧默认域名 nclatest.znin.net 已不可达，可用 NAPCAT_INSTALL_URL 覆盖。
+NAPCAT_INSTALL_URL="${NAPCAT_INSTALL_URL:-https://raw.githubusercontent.com/NapNeko/NapCat-Installer/main/script/install.sh}"
+NAPCAT_PROXY="${NAPCAT_PROXY:-0}"
 RUN_USER="${SUDO_USER:-$USER}"
 RUN_HOME="$(eval echo "~$RUN_USER")"
 
@@ -118,39 +120,47 @@ ok '猫娘插件已装入 profile'
 
 # ---------- 5. NapCat（可跳过）----------
 if [ "${SKIP_NAPCAT:-0}" != 1 ]; then
-  say '安装 NapCat（官方安装器；无桌面环境会配 Xvfb + x11vnc 供扫码）…'
-  if [ "${CN_MIRROR:-0}" = 1 ]; then
-    warn '国内镜像模式：NapCat 官方脚本从 GitHub 拉取，如缓慢可稍后手动执行其安装指引'
-  fi
+  say '安装 NapCat（官方 rootless Shell 安装器：Xvfb 里跑 QQNT，扫码走内置 WebUI）…'
   curl -fsSL "$NAPCAT_INSTALL_URL" -o /tmp/napcat-install.sh
-  # 官方脚本通常支持 sudo bash napcat.sh；交互项尽量走默认（它会处理 QQ/Xvfb/systemd）
-  bash /tmp/napcat-install.sh || warn 'NapCat 安装器返回非零（版本差异）。可稍后手动安装，或在面板「连接」里改接任意 OneBot。'
+  # 官方脚本以 root 运行时只用 sudo 装 apt 依赖，产物全部落在 $HOME/Napcat —— 故必须把 HOME
+  # 指到普通用户家目录，否则会装进 /root/Napcat。参数：--docker n 选 Shell 版、--cli y 装
+  # napcat TUI、--proxy 0 直连 GitHub（国内可用 NAPCAT_PROXY 切官方加速档）。脚本无 set -e，
+  # 下载失败不退出，所以下面再用关键产物是否存在兜底判定。
+  HOME="$RUN_HOME" bash /tmp/napcat-install.sh --docker n --cli y --proxy "$NAPCAT_PROXY" \
+    || warn 'NapCat 安装器返回非零（多为网络问题）。可稍后以普通用户重跑官方脚本，或在面板「连接」改接任意 OneBot。'
 
-  NAPCAT_DIR="${NAPCAT_DIR:-$RUN_HOME/napcat}"
-  say "在 $NAPCAT_DIR 准备 OneBot 配置（首次扫码登录小号后，由面板自动写入正式 onebot11_<QQ>.json）…"
-  install -d -o "$RUN_USER" -g "$RUN_USER" "$NAPCAT_DIR/config"
-  cat > "$NAPCAT_DIR/run-napcat.sh" <<'RUNEOF'
+  # 官方固定布局：QQ 本体在 ~/Napcat/opt/QQ/qq，NapCat 注入在其 resources/app/app_launcher/napcat，
+  # OneBot/WebUI 配置读 napcat/config/。provision() 也写到这个 config 目录，故 NAPCAT_DIR 必须是它。
+  NAPCAT_DIR="$RUN_HOME/Napcat/opt/QQ/resources/app/app_launcher/napcat"
+  QQ_BIN="$RUN_HOME/Napcat/opt/QQ/qq"
+  if [ -x "$QQ_BIN" ] && [ -d "$NAPCAT_DIR" ]; then
+    # root 跑安装器可能在用户家目录留下 root 属主文件，统一归还，否则插件以普通用户 spawn 时写不进配置。
+    chown -R "$RUN_USER":"$RUN_USER" "$RUN_HOME/Napcat"
+    say "在 $NAPCAT_DIR 准备 OneBot 配置与启动脚本…"
+    install -d -o "$RUN_USER" -g "$RUN_USER" "$NAPCAT_DIR/config"
+    cat > "$NAPCAT_DIR/run-napcat.sh" <<'RUNEOF'
 #!/usr/bin/env bash
-# Kinstra Neko 调起的 NapCat 启动脚本（安装器生成的兜底）。
-# 插件在 systemd(kinstra-neko) 里以普通用户 spawn 本脚本，故 sudo 必须 -n 非交互，
-# 否则会卡在密码输入。优先用官方安装器注册的 napcat 系统服务。
+# Kinstra Neko 调起的 NapCat 启动脚本（安装器生成）。
+# 官方 rootless Shell 形态：没有 systemd 服务、没有 x11vnc；在 Xvfb 虚拟显示里前台跑 QQNT，
+# 扫码/登录管理走 NapCat 内置 WebUI（token 见同目录 config/webui.json，默认端口 6099）。
+# 插件以普通用户 spawn 本脚本（cwd=本目录）；exec 让 QQ 顶替本壳，信号可直达。
 set -e
-if systemctl list-unit-files 2>/dev/null | grep -q '^napcat'; then
-  if systemctl start napcat 2>/dev/null; then :; else sudo -n systemctl start napcat; fi
-  echo 'napcat 系统服务已启动'
-else
-  echo "未发现 napcat systemd 服务。请用 NapCat 官方方式启动（如 sudo napcat / sudo bash 官方安装脚本），" >&2
-  echo "或在控制台「连接」页改接任意已在跑的 OneBot v11 实现。" >&2
-  exit 1
-fi
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 本脚本在 resources/app/app_launcher/napcat 下，上溯四级到 opt/QQ，QQ 本体在那。
+QQ="$(cd "$DIR/../../../.." && pwd)/qq"
+[ -x "$QQ" ] || QQ="$HOME/Napcat/opt/QQ/qq"
+exec xvfb-run -a "$QQ" --no-sandbox "$@"
 RUNEOF
-  chmod +x "$NAPCAT_DIR/run-napcat.sh"
-  chown -R "$RUN_USER":"$RUN_USER" "$NAPCAT_DIR"
-  # 关键：把真实 NapCat 目录种进插件配置，否则插件 detect() 会回落到
-  # ~/.dsh/plugins-data/kinstra-neko/napcat，与安装目录不一致而判“未安装”。
-  su - "$RUN_USER" -c "pnpm dlx kinstra-neko@latest set-napcat-dir '$NAPCAT_DIR' </dev/null" \
-    || warn '未能把 NapCat 目录写入插件配置，可在面板「连接」页手填：'"$NAPCAT_DIR"
-  ok 'NapCat 安装/引导完成（首次需扫码登录小号，见 NapCat 官方输出或面板连接页）'
+    chmod +x "$NAPCAT_DIR/run-napcat.sh"
+    chown -R "$RUN_USER":"$RUN_USER" "$NAPCAT_DIR"
+    # 关键：把真实 NapCat 目录种进插件配置，否则插件 detect() 会回落到
+    # ~/.dsh/plugins-data/kinstra-neko/napcat，与安装目录不一致而判“未安装”。
+    su - "$RUN_USER" -c "pnpm dlx kinstra-neko@latest set-napcat-dir '$NAPCAT_DIR' </dev/null" \
+      || warn '未能把 NapCat 目录写入插件配置，可在面板「连接」页手填：'"$NAPCAT_DIR"
+    ok 'NapCat 安装完成（首次需经 SSH 隧道打开其 WebUI 扫码登录小号，见下方上线步骤）'
+  else
+    warn "未找到 $QQ_BIN，NapCat 可能没装完整（多为下载失败）。可重跑本脚本，或在面板「连接」改接任意已在跑的 OneBot v11。"
+  fi
 fi
 
 # ---------- 6. systemd 服务 ----------
@@ -217,7 +227,10 @@ cat <<TIPS
 
   上线步骤：
   1. 控制台按猫娘向导填「猫娘小号 QQ」和「你的 QQ」
-  2. 扫码登录 NapCat 里的小号（无桌面服务器走 x11vnc，见 NapCat 安装输出）
+  2. 扫码登录 NapCat 里的小号（headless 服务器走 SSH 隧道，勿对公网开放 6099）：
+       本机执行  ssh -L 6099:127.0.0.1:6099 $RUN_USER@<服务器 IP>
+       浏览器开  http://127.0.0.1:6099  ，token 见服务器上
+       $NAPCAT_DIR/config/webui.json 的 "token" 字段
   3. 在 DSH 设置里配置模型服务商与 API Key
   4. 把要养她的群加进白名单
   5. 出厂是试运行：先在「试运行」页确认她会说什么，再关试运行开麦
