@@ -105,7 +105,11 @@ say '初始化 Kinstra Neko profile 与插件…'
 INIT_ARGS='init'
 [ -n "${KINSTRA_NEKO_SPEC:-}" ] && INIT_ARGS="init --link $KINSTRA_NEKO_SPEC"
 # 用 pnpm dlx 而非 npx：同上，避开 npm 严格 peer 对 alpha 版本的 ERESOLVE。
-su - "$RUN_USER" -c "DSH_VERSION=$DSH_VERSION pnpm dlx kinstra-neko@latest $INIT_ARGS </dev/tty" || \
+# curl|bash 时 stdin 是脚本管道，真实交互要读键盘得用 /dev/tty；但无控制终端
+# （非交互 ssh、部分 sudo）下 /dev/tty 打不开会直接报错，故探测后回退 /dev/null
+# （init 唯一交互是可跳过的 API Key，EOF 即取默认空值）。
+if ( true </dev/tty ) 2>/dev/null; then TTYIN=/dev/tty; else TTYIN=/dev/null; fi
+su - "$RUN_USER" -c "DSH_VERSION=$DSH_VERSION pnpm dlx kinstra-neko@latest $INIT_ARGS < $TTYIN" || \
   die '插件初始化失败（网络问题可重试；开发版可设 KINSTRA_NEKO_SPEC=本地目录）'
 ok '猫娘插件已装入 profile'
 
