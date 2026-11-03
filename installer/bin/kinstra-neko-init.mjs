@@ -157,7 +157,7 @@ function cmdInit(options) {
   console.log()
   say('初始化完成！接下来：')
   console.log(`  1. 确保 QQ 协议端在跑（NapCat：先执行平台安装脚本；或自行准备 OneBot v11）`)
-  console.log(`  2. 启动控制台：  ${c.bold}dsh --profile ${PROFILE} web --port ${port}${c.reset}`)
+  console.log(`  2. 启动控制台：  ${c.bold}dsh --profile ${PROFILE} --port ${port} --no-open${c.reset}`)
   console.log(`  3. 浏览器打开 http://127.0.0.1:${port} ，按猫娘向导填小号 QQ、你的 QQ、白名单`)
   console.log(`     默认是试运行：她只会在面板记录“本来会说什么”，确认对味后再关试运行\n`)
 }

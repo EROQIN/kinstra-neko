@@ -94,12 +94,12 @@ DSH 是 pnpm 生态（依赖多为 alpha 预发布版本，npm 的严格 peer �
 ```bash
 npm i -g pnpm                      # 若还没有 pnpm
 pnpm dlx kinstra-neko@latest init  # 建 profile、装 bundle、引导写凭据
-dsh --profile kinstra-neko web --port 3090
+dsh --profile kinstra-neko --port 3090   # 控制台会自动打开带一次性 token 的页面
 ```
 
 ### 装完之后 · 3 分钟向导
 
-1. 浏览器打开 `http://127.0.0.1:3090`（云服务器用 `http://<IP>:3090`，注意安全组放行）。
+1. 打开控制台：Windows 双击桌面图标会自动用带一次性 token 的链接打开；Linux 服务器从安装结尾输出或 `journalctl -u kinstra-neko -n 30 | grep -o 'http://.*token=.*' | tail -1` 取带 token 的地址（裸 `http://<IP>:3090` 会被令牌门挡住，云服务器记得安全组放行 3090）。
 2. 按向导填：**猫娘小号 QQ**、**你的 QQ（主人）**。
 3. 在「连接」页点「生成 OneBot 配置」再点「启动 NapCat」，用猫娘小号扫弹出窗口里的二维码登录；插件会自动核对登录号与配置是否一致。
 4. 在 DSH 设置里配置模型服务商与 API Key（DeepSeek 官方或任意 OpenAI 兼容端点）。
@@ -222,7 +222,7 @@ npm run build                      # tsdown 双入口：lib/index.js + lib/clien
 # 装进本地 DSH 调试：
 dsh kinstra-neko --from-default-profile web --dump-config >/dev/null   # 仅首次
 dsh plugin --profile kinstra-neko add "link:$PWD"
-dsh --profile kinstra-neko web --port 3090
+dsh --profile kinstra-neko --port 3090   # 控制台会自动打开带一次性 token 的页面
 ```
 
 无真实 QQ 环境时，决策、消息解析、记忆、回复拆条均为纯函数，直接跑单测即可；

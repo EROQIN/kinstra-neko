@@ -183,8 +183,8 @@ $startBat = Join-Path $appData 'start-kinstra.bat'
 REM Kinstra Neko 启动脚本（安装器生成）
 title Kinstra Neko
 echo Starting Kinstra Neko on http://127.0.0.1:$WebPort ...
-start "" http://127.0.0.1:$WebPort
-dsh --profile $ProfileName web --port $WebPort
+echo 浏览器会自动打开带一次性 token 的控制台；若没弹出，复制本窗口日志里 http://...?token=... 的链接。
+dsh --profile $ProfileName --port $WebPort
 pause
 "@ | Set-Content -Encoding UTF8 $startBat
 Ok "启动脚本：$startBat（已在桌面放快捷方式）"

@@ -14,11 +14,15 @@
 #   # 或下载后：sudo CN_MIRROR=1 bash install.sh
 #
 # 可覆盖变量：DSH_VERSION、KINSTRA_NEKO_SPEC（本地/自定义插件源）、WEB_PORT（默认 3090）、
+#             WEB_HOST（默认主网卡 IP 供远程访问；设 127.0.0.1 只本机）、
 #             NAPCAT_INSTALL_URL、SKIP_NAPCAT=1
 
 set -euo pipefail
 
 WEB_PORT="${WEB_PORT:-3090}"
+# 远程（云服务器）浏览器访问需绑到网卡上的具体 IP（DSH 拒绝 0.0.0.0 通配）。
+# 默认取主网卡首个 IPv4；只想本机访问可 WEB_HOST=127.0.0.1。
+WEB_HOST="${WEB_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
 DSH_VERSION="${DSH_VERSION:-0.2.1-rc.3}"
 NAPCAT_INSTALL_URL="${NAPCAT_INSTALL_URL:-https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh}"
 RUN_USER="${SUDO_USER:-$USER}"
@@ -147,6 +151,9 @@ fi
 say '注册 systemd 服务 kinstra-neko…'
 NODE_BIN="$(su - "$RUN_USER" -c 'command -v node')"
 DSH_BIN="$(su - "$RUN_USER" -c 'command -v dsh')"
+# --host 只接受具体本机 IP（拒绝通配）；取不到就不传给 DSH（回落其默认 loopback）。
+BIND_ARGS="--port $WEB_PORT --no-open"
+[ -n "$WEB_HOST" ] && BIND_ARGS="--host $WEB_HOST $BIND_ARGS"
 cat > /etc/systemd/system/kinstra-neko.service <<SVCEOF
 [Unit]
 Description=Kinstra Neko — DSH web with QQ catgirl
@@ -159,7 +166,7 @@ User=$RUN_USER
 Environment=NODE_ENV=production
 # 2H2G 内存上限：给 NapCat/系统留足，DSH 侧压缩到 ~700MB 老生代
 Environment=NODE_OPTIONS=--max-old-space-size=700
-ExecStart=$DSH_BIN --profile kinstra-neko web --port $WEB_PORT --no-open
+ExecStart=$DSH_BIN --profile kinstra-neko $BIND_ARGS
 Restart=on-failure
 RestartSec=5
 WorkingDirectory=$RUN_HOME
@@ -173,14 +180,32 @@ systemctl enable kinstra-neko >/dev/null 2>&1
 systemctl restart kinstra-neko
 ok '服务已启动并设为开机自启'
 
-sleep 3
-systemctl is-active --quiet kinstra-neko && ok 'kinstra-neko 正在运行' || warn '服务没起来：journalctl -u kinstra-neko -n 50 看日志'
+# web 首次挂载插件要十几秒，等到 active 且端口起来（最多 ~40s）
+BIND_IP="${WEB_HOST:-127.0.0.1}"
+for _ in $(seq 1 20); do
+  systemctl is-active --quiet kinstra-neko || { warn '服务没起来：journalctl -u kinstra-neko -n 50 看日志'; break; }
+  curl -s -o /dev/null --max-time 2 "http://$BIND_IP:$WEB_PORT/" && break
+  sleep 2
+done
+systemctl is-active --quiet kinstra-neko && ok "kinstra-neko 正在运行（监听 $BIND_IP:$WEB_PORT）"
+
+# DSH web 默认带一次性 token 门，从日志取带 token 的直达 URL
+TOKEN_URL="$(journalctl -u kinstra-neko --no-pager 2>/dev/null | grep -oE 'http://[^ ]*\?token=[^ ]+' | tail -1)"
+if [ -n "$TOKEN_URL" ]; then
+  TOKEN_URL="${TOKEN_URL/127.0.0.1/$BIND_IP}"
+  TOKEN_URL="${TOKEN_URL/localhost/$BIND_IP}"
+else
+  TOKEN_URL="http://$BIND_IP:$WEB_PORT/（按页面提示取 token：journalctl -u kinstra-neko -n 30）"
+fi
 
 echo
 say '安装完成！'
 cat <<TIPS
 
-  控制台：    http://<服务器IP>:$WEB_PORT
+  控制台（带免输 token 的直达地址）：
+    $TOKEN_URL
+  （也可运行： journalctl -u kinstra-neko -n 30 | grep -o 'http://.*token=.*' | tail -1）
+  云服务器：确认安全组/防火墙放行 $WEB_PORT/tcp；只想本机访问用 WEB_HOST=127.0.0.1 重装。
   服务管理：  sudo systemctl {status|restart|stop} kinstra-neko
   实时日志：  journalctl -u kinstra-neko -f
 
