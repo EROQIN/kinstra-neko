@@ -83,11 +83,14 @@ if [ "$need_node" = 1 ]; then
 fi
 
 # ---------- 3. DSH ----------
-if ! su - "$RUN_USER" -c 'command -v dsh' >/dev/null 2>&1; then
+# 系统级 node（NodeSource）的全局 prefix 是 /usr，/usr/lib/node_modules 归 root，
+# 因此全局包必须以 root 身份装（bin 链到 /usr/bin/dsh，普通用户也能调用）。
+# 切勿 su 到普通用户执行 npm -g：写不进 root 目录会 EACCES。
+if ! command -v dsh >/dev/null 2>&1; then
   say "全局安装 DeepSeek Harness @$DSH_VERSION…"
-  su - "$RUN_USER" -c "npm install -g @deepseek-ai/dsh@$DSH_VERSION --no-audit --no-fund"
+  npm install -g "@deepseek-ai/dsh@$DSH_VERSION" --no-audit --no-fund
 fi
-ok "DSH：$(su - "$RUN_USER" -c 'dsh --version' 2>/dev/null || echo 已安装)"
+ok "DSH：$(dsh --version 2>/dev/null || echo 已安装)"
 
 # ---------- 4. Kinstra Neko 插件 ----------
 say '初始化 Kinstra Neko profile 与插件…'
