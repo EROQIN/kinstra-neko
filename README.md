@@ -8,15 +8,17 @@
 基于 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> 二次开发，通过 OneBot v11 接入 QQ。
 </p>
 
-<p align="center">
-  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-67e8f9?style=flat-square"/>
-  <img alt="Platform: Linux | Windows" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows-ff7eb3?style=flat-square"/>
-  <img alt="Runtime: Node >= 22.19" src="https://img.shields.io/badge/runtime-Node%20%E2%89%A5%2022.19-a78bfa?style=flat-square"/>
-  <img alt="Protocol: OneBot v11" src="https://img.shields.io/badge/protocol-OneBot%20v11-cbb8ff?style=flat-square"/>
-  <img alt="Based on DeepSeek Harness" src="https://img.shields.io/badge/based%20on-DeepSeek%20Harness-ff9ecb?style=flat-square"/>
-  <img alt="TypeScript 6.0" src="https://img.shields.io/badge/TypeScript-6.0-3178c6?style=flat-square"/>
-  <img alt="56 tests passing" src="https://img.shields.io/badge/tests-56%20passing-3fb96e?style=flat-square"/>
-</p>
+<div align="center">
+
+![License: MIT](https://img.shields.io/badge/license-MIT-67e8f9?style=flat-square)
+![Platform: Linux | Windows](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-ff7eb3?style=flat-square)
+![Runtime: Node 22.19+](https://img.shields.io/badge/runtime-Node%2022.19%2B-a78bfa?style=flat-square)
+![Protocol: OneBot v11](https://img.shields.io/badge/protocol-OneBot%20v11-cbb8ff?style=flat-square)
+![Based on DeepSeek Harness](https://img.shields.io/badge/based%20on-DeepSeek%20Harness-ff9ecb?style=flat-square)
+![TypeScript 6.0](https://img.shields.io/badge/TypeScript-6.0-3178c6?style=flat-square)
+![56 tests passing](https://img.shields.io/badge/tests-56%20passing-3fb96e?style=flat-square)
+
+</div>
 
 > [!WARNING]
 > **账号风险须知**：QQ 非官方协议接入存在账号被限制的可能。**请务必使用专门注册的小号**，本项目作者不对任何账号后果负责。建议先拉小号进测试群体验，确认稳定再长期使用。
