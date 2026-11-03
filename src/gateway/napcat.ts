@@ -137,9 +137,12 @@ export function createNapCatManager(opts: NapCatManagerOptions) {
       child = spawn(script, [], {
         cwd: installDir(),
         // Windows 下 NapCat 的扫码二维码打印在它自己的控制台窗口里，必须露窗；
-        // Linux 走 Xvfb/系统服务，无需窗口。
+        // Linux 走 Xvfb，无需窗口。
         windowsHide: process.platform !== 'win32',
-        detached: false,
+        // POSIX 下让 run 脚本当新进程组组长：run-napcat.sh `exec xvfb-run`，其下再 fork
+        // Xvfb 与 QQ(+zygote)，都继承这个 pgid。停止时对负 pid 发信号才能一次收干净整组；
+        // 只 kill 直接子会留下 Xvfb/QQ 孤儿（真机实测）。Windows 靠 taskkill /T，不能 detached。
+        detached: process.platform !== 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: process.platform === 'win32',
       })
@@ -154,14 +157,20 @@ export function createNapCatManager(opts: NapCatManagerOptions) {
     return { ok: true, message: '已启动' }
   }
 
-  /** 结束 NapCat 进程。Windows 下 spawn(.bat, shell:true) 的 pid 是 cmd.exe，
-   *  只 kill 它会孤儿化 NapCat/QQ，必须 taskkill /T 连整棵进程树一起结束。 */
+  /** 结束 NapCat 进程。
+   *  Windows 下 spawn(.bat, shell:true) 的 pid 是 cmd.exe，只 kill 它会孤儿化
+   *  NapCat/QQ，必须 taskkill /T 连整棵进程树一起结束。
+   *  POSIX 下 start() 用 detached:true 建了新进程组，对负 pid 发 SIGTERM 即可连同
+   *  xvfb-run → Xvfb + QQ(+zygote) 整组结束；进程组已不在（ESRCH）时兜底 kill 直接子。 */
   function killTree(me: NonNullable<typeof child>): void {
     if (process.platform === 'win32') {
       try {
         execFileSync('taskkill', ['/pid', String(me.pid), '/T', '/F'], { stdio: 'ignore' })
         return
       } catch { /* 兜底再试普通 kill */ }
+    }
+    if (typeof me.pid === 'number') {
+      try { process.kill(-me.pid, 'SIGTERM'); return } catch { /* 组已不在，兜底直接 kill */ }
     }
     try { me.kill() } catch { /* ignore */ }
   }
