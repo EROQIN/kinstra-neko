@@ -79,3 +79,15 @@
                 name: '@deepseek-ai/dsh-compaction-basic'
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
+
+# 白标外壳（按 entry id 覆盖 bundle 层已有的官方条目；config 为整体替换）。
+- id: ui-settings-models
+  # 关掉首启「登录 DeepSeek 账号 / 添加 API Key」自动弹窗（我们有自己的领养向导）。
+  config:
+    credentialOnboarding: false
+- id: ui-plugin-manager
+  disabled: true            # 去侧栏「插件」
+- id: ui-schedule
+  disabled: true            # 去侧栏「自动化任务」
+- id: entry-customization
+  disabled: true            # 去侧栏「更多」

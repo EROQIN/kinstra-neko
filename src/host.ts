@@ -5,12 +5,16 @@
 // 安全默认：总开关关、试运行开、白名单空——装好不配置一句话都不会发。
 
 import type { Context } from '@deepseek-ai/cordis'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createLogger, logBoard } from './core/logger.js'
 import { createConfigStore } from './config/store.js'
 import { publicConfig, type Config } from './config/schema.js'
 import { createOneBotClient, type OneBotClient } from './onebot/client.js'
 import type { EndpointConfig, OneBotEvent, OneBotState } from './onebot/types.js'
 import { createNapCatManager } from './gateway/napcat.js'
+import { createNapCatWebUI, type QrStatus } from './gateway/webui.js'
 import { createHub } from './chat/hub.js'
 import { SessionManager } from './sessions/manager.js'
 import { MemoryStore } from './memory/store.js'
@@ -21,6 +25,12 @@ export const name = 'kinstra-neko'
 export const inject = ['agents', 'sessions', 'sessionController', 'workspaceRegistry', 'systemPrompt', 'webServer', 'timer', 'llm']
 
 const PREFIX = '/kinstra/api'
+
+// dev(src/host.ts) 与打包(lib/index.js) 的上一级都是包根，package.json 都在 ../package.json。
+const PKG_VERSION = (() => {
+  try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string }
+  catch { return '0.0.0' }
+})()
 
 export function apply(ctx: Context) {
   const logger = createLogger('core')
@@ -37,10 +47,16 @@ export function apply(ctx: Context) {
   variable('kinstra_rules_private', () => privateRules(getConfig()))
 
   // —— 网关 ——
+  const webui = createNapCatWebUI({
+    installDir: () => napcat.installDir(),
+    configuredPort: () => getConfig().napcat.webuiPort || 6099,
+    log: logger.child('webui'),
+  })
   const napcat = createNapCatManager({
     config: () => getConfig().napcat,
     botQQ: () => getConfig().botQQ,
     onToken: (token) => configStore.set({ ...getConfig(), napcat: { ...getConfig().napcat, token } }),
+    onWebUiToken: (token) => webui.setDiscoveredToken(token),
     log: logger.child('napcat'),
   })
 
@@ -62,6 +78,7 @@ export function apply(ctx: Context) {
   // —— OneBot 客户端与登录号核对 ——
   let onebotState: OneBotState = 'stopped'
   let loginOk = false
+  let loginUin = ''
   let wrongAccount = ''
   let verifying = false
   let pendingEvents: OneBotEvent[] = []
@@ -93,10 +110,12 @@ export function apply(ctx: Context) {
       if (!uin) { client.stop(); return }
       if (bot && uin !== bot) {
         wrongAccount = uin
+        loginUin = ''
         client.stop()
         return
       }
       loginOk = true
+      loginUin = uin
       wrongAccount = ''
       const queued = pendingEvents
       pendingEvents = []
@@ -112,7 +131,7 @@ export function apply(ctx: Context) {
     log: logger.child('onebot'),
     onState: (s, detail) => {
       onebotState = s
-      if (s !== 'connected') { loginOk = false; pendingEvents = [] }
+      if (s !== 'connected') { loginOk = false; loginUin = ''; pendingEvents = [] }
       else void checkLogin(onebotRef.client)
       logger.child('onebot').info(`QQ 网关：${s}${detail ? `（${detail}）` : ''}`)
     },
@@ -195,6 +214,53 @@ export function apply(ctx: Context) {
       `kinstra: 路由 ${path}`,
     )
 
+  // —— 白标：favicon / manifest / 浏览器标题 ——
+  // 打包后入口在 <pkg>/lib/index.js，资产在 <pkg>/assets。
+  const ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', 'assets')
+  const brandFile = (file: string): Buffer => readFileSync(join(ASSETS, file))
+  const brandTypes: Record<string, string> = {
+    '/favicon.svg': 'image/svg+xml; charset=utf-8',
+    '/manifest.webmanifest': 'application/manifest+json; charset=utf-8',
+  }
+  for (const [path, type] of Object.entries(brandTypes)) {
+    const file = path.slice(1)
+    ctx.effect(
+      () => (ctx as any).webServer.register({
+        kind: 'exact',
+        path,
+        handler: (_req: any, res: any) => {
+          res.statusCode = 200
+          res.setHeader?.('content-type', type)
+          res.setHeader?.('cache-control', 'public, max-age=3600')
+          res.end(brandFile(file))
+        },
+      }),
+      `kinstra: 静态 ${path}`,
+    )
+  }
+  // index.html：换 <title>、把原有 favicon/manifest/apple 标题指向品牌资产。
+  ctx.effect(
+    () => (ctx as any).webServer.tapIndex((html: string) => html
+      .replace(/<title>[\s\S]*?<\/title>/i, '<title>Kinstra Neko</title>')
+      .replace(/(<link[^>]*rel=["'][^"']*icon[^"']*["'][^>]*href=["'])[^"']*/i, `$1/favicon.svg`)
+      .replace(/(<link[^>]*href=["'])[^"']*(["'][^>]*rel=["'][^"']*icon[^"']*["'])/i, `$1/favicon.svg$2`)
+      .replace(/(<link[^>]*rel=["']manifest["'][^>]*href=["'])[^"']*/i, `$1/manifest.webmanifest`)
+      .replace(/(<link[^>]*href=["'])[^"']*(["'][^>]*rel=["']manifest["'])/i, `$1/manifest.webmanifest$2`)
+      .replace(/<meta[^>]*name=["']apple-mobile-web-app-title["'][^>]*>/i, '<meta name="apple-mobile-web-app-title" content="Kinstra Neko">')),
+    'kinstra: index 白标',
+  )
+  // 运行时 DocumentTitle 会把标题设成「DSH 本地构建」，tapIndex 管不住：注入脚本拦 setter。
+  ctx.effect(() => {
+    const off = (ctx as any).on('webserver/index-inject', (table: any[]) => {
+      table.push({
+        kind: 'script',
+        placement: 'head',
+        text: "(function(){try{var d=Object.getOwnPropertyDescriptor(document,'title');function n(v){v=String(v);return /DSH|DeepSeek Harness|本地构建|Local Build/.test(v)?'Kinstra Neko':v;}Object.defineProperty(document,'title',{configurable:true,enumerable:true,get:function(){return d&&d.get?d.get.call(document):(document.querySelector('title')||{}).textContent||'';},set:function(v){var x=n(v);if(d&&d.set)d.set.call(document,x);else{var t=document.querySelector('title');if(t)t.textContent=x;}}});}catch(e){}})();",
+      })
+    })
+    return () => { try { typeof off === 'function' && off() } catch { /* ignore */ } }
+  }, 'kinstra: 标题锁定脚本')
+
   async function overview() {
     const c = getConfig()
     let login: { uin: string; nickname: string } | null = null
@@ -206,14 +272,26 @@ export function apply(ctx: Context) {
     }
     return {
       ok: true,
-      version: '1.0.0',
+      version: PKG_VERSION,
       config: publicConfig(c),
-      onebot: { state: onebotState, login, wrongAccount, endpoint: { httpUrl: endpoint().httpUrl, wsUrl: endpoint().wsUrl } },
+      onebot: { state: onebotState, login, loginUin, wrongAccount, endpoint: { httpUrl: endpoint().httpUrl, wsUrl: endpoint().wsUrl } },
       napcat: { ...napcat.detect(), healthy: await napcat.healthy().catch(() => false) },
       stats: hub.stats(),
       memory: memory.stats(),
       personas: listPersonas(),
     }
+  }
+
+  // 扫码登录状态：online 以 OneBot 在线且 QQ 号正确为最终权威；未登录时透传 NapCat WebUI phase。
+  async function qrStatus(): Promise<QrStatus> {
+    const c = getConfig()
+    if (c.gateway !== 'napcat') return { ok: true, phase: 'stopped', message: '当前接的是外部 OneBot，无需在此扫码' }
+    if (wrongAccount) return { ok: false, phase: 'offline', loginError: `登录的是 ${wrongAccount}，不是配置的小号 ${c.botQQ}，请退出后用小号重扫` }
+    if (onebotState === 'connected' && loginOk && loginUin && (!c.botQQ || loginUin === c.botQQ)) {
+      return { ok: true, phase: 'online', uin: loginUin }
+    }
+    if (!(await napcat.running().catch(() => false))) return { ok: true, phase: 'stopped' }
+    return webui.loginStatus({ online: false })
   }
 
   route('/state', () => overview())
@@ -262,8 +340,10 @@ export function apply(ctx: Context) {
     const ep = napcat.provision()
     return { ok: true, endpoint: { httpUrl: ep.httpUrl, wsUrl: ep.wsUrl }, message: '已生成 OneBot 配置和访问令牌' }
   })
-  route('/napcat/start', async () => napcat.start())
-  route('/napcat/stop', async () => napcat.stop())
+  route('/napcat/start', async () => { webui.reset(); return napcat.start() })
+  route('/napcat/stop', async () => { const r = napcat.stop(); webui.reset(); return r })
+  route('/napcat/qr/poll', () => qrStatus())
+  route('/napcat/qr/refresh', async () => { try { return { ok: true, ...(await webui.refreshQr()) } } catch (e) { return { ok: false, message: (e as Error).message } } })
 
   route('/personas', () => ({ ok: true, list: listPersonas(), current: getConfig().persona.current }))
   route('/persona/get', async (req) => {

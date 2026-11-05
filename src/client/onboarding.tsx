@@ -49,7 +49,7 @@ export function Onboarding() {
           h('div', null, '1. 一键安装器会装好 Node、DeepSeek Harness 和 NapCat（若还没运行，见项目 README）：'),
           h('pre', { style: { background: '#141416', padding: 12, borderRadius: 8, fontSize: 11.5, overflowX: 'auto' } },
             '# Linux\ncurl -fsSL https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/linux/install.sh | sudo bash\n# Windows（PowerShell）\nirm https://raw.githubusercontent.com/EROQIN/kinstra-neko/main/installer/windows/install.ps1 | iex'),
-          h('div', { style: { marginTop: 10 } }, '2. 在「连接」页点「生成 OneBot 配置」再「启动 NapCat」，按提示在弹出的 NapCat 窗口用', h('b', { style: { color: BRAND_COLOR } }, '猫娘小号'), '扫码登录。'),
+          h('div', { style: { marginTop: 10 } }, '2. 打开左侧「Kinstra Neko → 连接」页：填好小号 QQ 并保存，点「生成 OneBot 配置」再「启动 NapCat」，用该页', h('b', { style: { color: BRAND_COLOR } }, '直接显示的二维码'), '让猫娘小号扫码登录，不用开任何外部窗口。'),
           h('div', { style: { marginTop: 8 } }, '3. 在 DSH 设置里配置好模型服务商和 API Key（或安装器已引导你填好）。'),
           h('div', { style: { marginTop: 12, fontSize: 12, opacity: 0.65 } }, '都就绪后点下面的"我已连好"，面板会自动核对登录的 QQ 号。')) as Any,
         state?.onebot && h('div', { style: { marginBottom: 12 } },

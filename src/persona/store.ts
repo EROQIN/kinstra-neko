@@ -6,7 +6,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dataDir } from '../core/store.js'
 
-const BUNDLED = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'personas')
+// dev 下本文件在 src/persona/，内置人格在仓库根 personas/；打包后并入单文件 lib/index.js，
+// 人格在包根 personas/（lib 的上一级）。按实际存在的位置自适应。
+const here = dirname(fileURLToPath(import.meta.url))
+const BUNDLED = existsSync(join(here, '..', 'personas'))
+  ? join(here, '..', 'personas')
+  : join(here, '..', '..', 'personas')
 const dir = () => dataDir('personas')
 
 export interface PersonaMeta {

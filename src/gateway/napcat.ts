@@ -28,6 +28,8 @@ export interface NapCatManagerOptions {
   config: () => NapCatConfigView
   botQQ: () => string
   onToken: (token: string) => void
+  /** NapCat 启动日志里打印出 WebUI token 时回灌（读不到 webui.json 时的兜底）。 */
+  onWebUiToken?: (token: string) => void
   log: Logger
 }
 
@@ -150,7 +152,13 @@ export function createNapCatManager(opts: NapCatManagerOptions) {
       return { ok: false, message: `启动失败：${(error as Error).message}` }
     }
     const me = child
-    me.stdout?.on('data', (b) => log.debug(String(b).split(/\r?\n/).filter(Boolean).slice(-3).join(' / ')))
+    me.stdout?.on('data', (b) => {
+      const text = String(b)
+      // 兜底抓 WebUI token：webui.json 刚生成前的窗口里，面板靠它先能换凭证。
+      const m = text.match(/WebUi Token:\s*([A-Za-z0-9_\-]+)/)
+      if (m && opts.onWebUiToken) { try { opts.onWebUiToken(m[1]!) } catch { /* ignore */ } }
+      log.debug(text.split(/\r?\n/).filter(Boolean).slice(-3).join(' / '))
+    })
     me.stderr?.on('data', (b) => log.debug(String(b).slice(0, 300)))
     me.on('exit', (code) => { if (child === me) { log.warn(`NapCat 退出（code ${code}）`); child = null } })
     log.info(`已启动 NapCat（pid ${me.pid}），首次运行需要在它的窗口里扫码登录小号`)

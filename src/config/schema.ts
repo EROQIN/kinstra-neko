@@ -39,6 +39,7 @@ export const ConfigSchema = z.object({
     dir: z.string(),
     httpPort: z.number().int().min(1).max(65535),
     wsPort: z.number().int().min(1).max(65535),
+    webuiPort: z.number().int().min(1).max(65535),
     token: z.string(),
   }),
 
@@ -115,7 +116,7 @@ export const DEFAULTS = {
   allow: { private: [], groups: [] },
   gateway: 'napcat' as const,
   onebot: { httpUrl: '', wsUrl: '', httpToken: '', wsToken: '' },
-  napcat: { dir: '', httpPort: 3000, wsPort: 3001, token: '' },
+  napcat: { dir: '', httpPort: 3000, wsPort: 3001, webuiPort: 6099, token: '' },
   workspaceDir: '',
   model: { provider: '', model: '', reasoningEffort: 'low', vision: 'auto' as const },
   chatModels: {

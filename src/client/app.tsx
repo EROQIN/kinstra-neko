@@ -1,5 +1,6 @@
 // Kinstra Neko 主面板：朴素内联样式，不依赖 DSH UI 组件库，保证各版本宿主可用。
 import { createElement as h, Fragment, useEffect, useState } from 'react'
+import QRCode from 'qrcode'
 import { api, usePoll } from './api.js'
 import { NekoIcon, BRAND_COLOR } from './brand.js'
 
@@ -69,7 +70,7 @@ export function KinstraPanel() {
       }, tabName[t]))),
 
     tab === 'overview' && h(Overview, { data, s, refresh }),
-    tab === 'connect' && h(Connect, { cfg, s, refresh }),
+    tab === 'connect' && h(Connect, { cfg, data, s, refresh }),
     tab === 'groups' && h(Groups, { cfg, s, refresh }),
     tab === 'persona' && h(PersonaPage, { cfg, data, s, refresh }),
     tab === 'observe' && h(ObservePage, { s }),
@@ -103,8 +104,9 @@ function Overview({ data, s, refresh }: any) {
   )
 }
 
-function Connect({ cfg, s, refresh }: any) {
+function Connect({ cfg, data, s, refresh }: any) {
   const [f, setF] = useState<AnyObj>(() => JSON.parse(JSON.stringify(cfg)))
+  const [busy, setBusy] = useState('')
   const set = (path: string, v: any) => {
     const next = JSON.parse(JSON.stringify(f))
     const parts = path.split('.')
@@ -113,7 +115,13 @@ function Connect({ cfg, s, refresh }: any) {
     o[parts.at(-1)!] = v
     setF(next)
   }
+  const run = async (what: string, p: Promise<any>, alertMsg = true) => {
+    setBusy(what)
+    try { const r = await p; if (alertMsg && r?.message) alert(r.message); refresh() } finally { setBusy('') }
+  }
   const save = async () => { const r = await api('/save', { body: f }); if (r.message) alert(r.message); refresh() }
+  const btn = (what: string, label: string, onClick: () => Promise<any>) =>
+    h('button', { style: s.btnGhost, disabled: !!busy, onClick: () => run(what, onClick()) }, busy === what ? '…' : label)
 
   return h(Fragment, null,
     h('div', { style: s.card },
@@ -129,15 +137,16 @@ function Connect({ cfg, s, refresh }: any) {
           h('option', { value: 'napcat' }, 'NapCat（推荐，安装器自动装好）'),
           h('option', { value: 'onebot' }, '任意 OneBot v11 地址'))),
       f.gateway === 'napcat' && h(Fragment, null,
-        h('div', { style: { ...s.sub, margin: '4px 0 10px' } }, '一键安装器已自动装好 NapCat（安装目录一般无需手改）。先填好小号 QQ 并保存，再点「生成配置」写入 OneBot 参数；首次启动会弹出 NapCat 窗口，在里面用小号扫码登录。'),
+        h('div', { style: { ...s.sub, margin: '4px 0 10px' } }, '一键安装器已自动装好 NapCat。先填好小号 QQ 并保存，点「生成配置」「启动 NapCat」，然后用下面的二维码让小号扫码登录即可，全程在本页完成。'),
         h(Field, { label: '安装目录', s }, h('input', { style: s.input, value: f.napcat.dir, placeholder: '留空=数据目录/napcat', onChange: (e: any) => set('napcat.dir', e.target.value) })),
         h(Field, { label: '端口 HTTP/WS', s },
           h('input', { style: { ...s.input, maxWidth: 90 }, value: f.napcat.httpPort, onChange: (e: any) => set('napcat.httpPort', Number(e.target.value)) }),
           h('input', { style: { ...s.input, maxWidth: 90 }, value: f.napcat.wsPort, onChange: (e: any) => set('napcat.wsPort', Number(e.target.value)) })),
         h('div', { style: s.row },
-          h('button', { style: s.btnGhost, onClick: async () => { const r = await api('/napcat/provision', { method: 'POST' }); alert(r.message); refresh() } }, '生成 OneBot 配置'),
-          h('button', { style: s.btnGhost, onClick: async () => alert((await api('/napcat/start', { method: 'POST' })).message) }, '启动 NapCat'),
-          h('button', { style: s.btnGhost, onClick: async () => alert((await api('/napcat/stop', { method: 'POST' })).message) }, '停止'))),
+          btn('provision', '生成 OneBot 配置', () => api('/napcat/provision', { method: 'POST' })),
+          btn('start', '启动 NapCat', () => api('/napcat/start', { method: 'POST' })),
+          btn('stop', '停止', () => api('/napcat/stop', { method: 'POST' }))),
+        h(QrLogin, { data, s })),
       f.gateway === 'onebot' && h(Fragment, null,
         h(Field, { label: 'HTTP 地址', s }, h('input', { style: s.input, value: f.onebot.httpUrl, placeholder: 'http://127.0.0.1:3000', onChange: (e: any) => set('onebot.httpUrl', e.target.value) })),
         h(Field, { label: 'WS 地址', s }, h('input', { style: s.input, value: f.onebot.wsUrl, placeholder: 'ws://127.0.0.1:3001', onChange: (e: any) => set('onebot.wsUrl', e.target.value) })),
@@ -146,11 +155,73 @@ function Connect({ cfg, s, refresh }: any) {
     h('div', { style: s.card },
       h('div', { style: s.cardTitle }, '上线开关'),
       h(Field, { label: '启用插件', s }, h('input', { type: 'checkbox', checked: !!f.enabled, onChange: (e: any) => set('enabled', e.target.checked) })),
-      h(Field, { label: '试运行（只记录）', s }, h('input', { type: 'checkbox', checked: !!f.dryRun, onChange: (e: any) => set('dryRun', e.target.checked) })),
+      h(Field, { label: '试运行（只记录）', s }, h('input', { type: 'checkbox', checked: !!f.dryRun, onChange: (e: any) => set('dryRun', e.target.value) })),
       h('div', { style: { ...s.sub, margin: '4px 0 0' } }, '建议先试运行一段时间，在「试运行」页确认她会说什么，再关掉试运行开麦。')),
-    h('button', { style: s.btn, onClick: save }, '保存设置'),
+    h('button', { style: { ...s.btn, ...(busy ? { opacity: 0.6 } : {}) }, disabled: !!busy, onClick: save }, '保存设置'),
   )
 }
+
+// 扫码登录卡：局部轮询 /napcat/qr/poll，二维码 URL 本地渲染；终态看 onebot 在线且 QQ 号正确。
+function QrLogin({ data, s }: any) {
+  const [st, setSt] = useState<AnyObj | null>(null)
+  const [img, setImg] = useState('')
+  const installed = !!data?.napcat?.installed
+
+  useEffect(() => {
+    let alive = true
+    let timer: any
+    const tick = async () => {
+      const r = await api('/napcat/qr/poll', { method: 'POST' }).catch(() => null)
+      if (!alive || !r) return
+      setSt(r)
+      // 关键阶段（已扫/启动中/重连）收紧到 1s，其余 2.5s
+      const fast = ['scanned', 'initializing', 'reconnecting', 'starting'].includes(r.phase)
+      timer = setTimeout(tick, r.phase === 'online' ? 5000 : fast ? 1000 : 2500)
+    }
+    timer = setTimeout(tick, 600)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [installed])
+
+  // qrcodeurl 变化就重渲染二维码
+  useEffect(() => {
+    if (!st?.qrcodeurl) { setImg(''); return }
+    let alive = true
+    QRCode.toDataURL(st.qrcodeurl, { width: 200, margin: 1, color: { dark: '#1a1a1f', light: '#ffffff' } })
+      .then((u: string) => { if (alive) setImg(u) }).catch(() => {})
+    return () => { alive = false }
+  }, [st?.qrcodeurl])
+
+  const phase: string = st?.phase ?? 'unknown'
+  const map: AnyObj = {
+    stopped: ['dim', 'NapCat 未运行，点上面「启动 NapCat」'],
+    starting: ['warn', 'NapCat 启动中，正在准备二维码…'],
+    waiting: ['ok', '用专门小号的手机 QQ 扫下面二维码'],
+    scanned: ['warn', '已扫描，请在手机上点「确认登录」'],
+    initializing: ['warn', '登录成功，正在接通 OneBot…'],
+    online: ['ok', st?.uin ? `已登录小号 ${st.uin}` : '已登录'],
+    offline: ['bad', st?.loginError || '登录服务离线'],
+    reconnecting: ['warn', 'NapCat 重连中…'],
+    unknown: ['dim', '状态读取中…'],
+  }
+  const [tone, text] = map[phase] ?? map.unknown
+
+  if (!installed) return h('div', { style: { ...s.sub, marginTop: 12 } }, '还没检测到 NapCat（缺 run-napcat 脚本）。重跑一键安装器，或在面板改对安装目录。')
+
+  return h('div', { style: { ...s.card, marginTop: 12, borderColor: BRAND_COLOR } },
+    h('div', { style: s.cardTitle }, '扫码登录小号', h(Pill, { text, tone, s })),
+    phase === 'online'
+      ? h('div', { style: { color: '#46d369', fontWeight: 600 } }, `✓ ${text}。接下来：去 DSH 设置填模型 API Key，到「群聊与权限」加白名单群。`)
+      : h(Fragment, null,
+          (phase === 'waiting' && img) && h('img', { src: img, width: 200, height: 200, alt: '登录二维码', style: { background: '#fff', padding: 8, borderRadius: 8, display: 'block' } }),
+          phase === 'waiting' && !img && h('div', { style: { ...s.sub, padding: '20px 0' } }, '二维码生成中…'),
+          (phase === 'scanned' || phase === 'initializing') && h('div', { style: { ...s.log, display: 'inline-block', margin: '10px 0' } }, text),
+          phase === 'starting' && h('div', { style: { ...s.sub, padding: '12px 0' } }, text),
+          (phase === 'stopped' || phase === 'offline' || phase === 'reconnecting' || phase === 'unknown') && h('div', { style: { ...s.sub, padding: '8px 0' } }, text),
+          st?.loginError && phase !== 'online' && h('div', { style: { ...s.bad, fontSize: 12, marginTop: 4 } }, st.loginError),
+          h('div', { style: { ...s.row, marginTop: 10 } },
+            h('button', { style: s.btnGhost, onClick: async () => { const r = await api('/napcat/qr/refresh', { method: 'POST' }); if (r?.qrcodeurl) setSt({ ...st, phase: 'waiting', qrcodeurl: r.qrcodeurl }); else if (r?.message) alert(r.message) } }, '刷新二维码'))))
+}
+
 
 function Groups({ cfg, s, refresh }: any) {
   const [f, setF] = useState<AnyObj>(() => JSON.parse(JSON.stringify(cfg)))

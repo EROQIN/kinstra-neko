@@ -3,8 +3,8 @@ import { createElement as h } from 'react'
 
 export const BRAND_COLOR = '#ff7eb3'
 
-export function NekoIcon({ size = 20 }: { size?: number }) {
-  return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-label': 'Kinstra Neko' },
+export function NekoIcon({ size = 20, className }: { size?: number; className?: string }) {
+  return h('svg', { className, width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-label': 'Kinstra Neko' },
     // 两只猫耳
     h('path', { d: 'M4 7 L6.5 3 L9.5 7 Z', fill: BRAND_COLOR }),
     h('path', { d: 'M14.5 7 L17.5 3 L20 7 Z', fill: BRAND_COLOR }),
