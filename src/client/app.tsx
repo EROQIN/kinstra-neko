@@ -1,8 +1,17 @@
 // Kinstra Neko 主面板：朴素内联样式，不依赖 DSH UI 组件库，保证各版本宿主可用。
 import { createElement as h, Fragment, useEffect, useState } from 'react'
-import QRCode from 'qrcode'
+import qrcode from 'qrcode-generator'
 import { api, usePoll } from './api.js'
 import { NekoIcon, BRAND_COLOR } from './brand.js'
+
+// qrcode-generator 是纯数据零依赖 UMD（在 DSH client ModuleLoader 沙箱里能被内联），
+// 直接生成 SVG 串，不依赖 canvas/DOM，包成 data URL 给 <img>。
+function qrDataUrl(text: string): string {
+  const qr = qrcode(0, 'M')
+  qr.addData(text)
+  qr.make()
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr.createSvgTag(6, 2))
+}
 
 type AnyObj = Record<string, any>
 
@@ -185,10 +194,7 @@ function QrLogin({ data, s }: any) {
   // qrcodeurl 变化就重渲染二维码
   useEffect(() => {
     if (!st?.qrcodeurl) { setImg(''); return }
-    let alive = true
-    QRCode.toDataURL(st.qrcodeurl, { width: 200, margin: 1, color: { dark: '#1a1a1f', light: '#ffffff' } })
-      .then((u: string) => { if (alive) setImg(u) }).catch(() => {})
-    return () => { alive = false }
+    try { setImg(qrDataUrl(st.qrcodeurl)) } catch { setImg('') }
   }, [st?.qrcodeurl])
 
   const phase: string = st?.phase ?? 'unknown'

@@ -21,7 +21,12 @@ export default defineConfig([
     platform: 'browser',
     dts: false,
     clean: false,
-    deps: { neverBundle: ['react', 'react/jsx-runtime'] },
+    deps: {
+      // react 由 DSH 宿主提供；qrcode-generator 必须物理内联进 client.js——client 半片跑在
+      // DSH 的 ModuleLoader 沙箱，裸 require 的 npm 包不在其模块表里（曾导致插件 import failed）。
+      neverBundle: ['react', 'react/jsx-runtime'],
+      alwaysBundle: ['qrcode-generator'],
+    },
     outputOptions: {
       entryFileNames: 'client.js',
       banner: 'window.__ModuleLoader__.load({ id: "kinstra-neko", factory: (require) => {',
