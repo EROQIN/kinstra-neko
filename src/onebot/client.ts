@@ -150,7 +150,14 @@ export function createOneBotClient(opts: OneBotClientOptions) {
       return
     }
     ws = sock
+    // 连接超时守卫：WS 服务尚未监听（NapCat 还在登录）时首次连接可能一直挂在
+    // CONNECTING 且不一定触发 onclose（Node 全局 WebSocket 真机实测），没有它重连
+    // 永不启动、状态永久卡在 connecting。到点未 open 就主动关闭，由 onclose 走退避重连。
+    const openTimer = setTimeout(() => {
+      try { sock.close() } catch { /* ignore */ }
+    }, 10_000)
     sock.onopen = () => {
+      clearTimeout(openTimer)
       backoff = RECONNECT_MIN
       setState('connected')
       log.info('已连上 QQ 网关（WS）')
@@ -173,6 +180,7 @@ export function createOneBotClient(opts: OneBotClientOptions) {
       }
     }
     sock.onclose = (ev) => {
+      clearTimeout(openTimer)
       if (ws === sock) ws = null
       for (const [k, p] of pending) {
         clearTimeout(p.timer)
