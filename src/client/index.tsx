@@ -34,12 +34,18 @@ export function apply(ctx: any) {
   ctx.slots.inject('sidebar.brand.name', () =>
     ctx.slots.register({ name: 'sidebar.brand.name', priority: -1, locale: NS }, () => BrandName))
 
-  // 面板本体（独立 key，不与官方 conversation 冲突）
-  ctx.slots.inject('main', () =>
-    ctx.slots.register(
+  // 面板本体（独立 key，不与官方 conversation 冲突）。
+  // register() 返回时该 key 已同步进入注册表，hasMainPanel 必为真——此刻同步选中，
+  // 让打开 web 的首帧就是 Kinstra Neko。不能用 setTimeout 轮询：选在 ui-workspace
+  // 首启恢复(beginNavigation await)窗口里会 abort 掉它、导致空白会话不绑定。
+  ctx.slots.inject('main', () => {
+    const disposeMain = ctx.slots.register(
       { name: 'main', key: PANEL_ID, locale: NS, inject: () => ({}) },
       (props: any) => h(KinstraPanel, props),
-    ))
+    )
+    try { ctx.layout?.selectPanel?.(PANEL_ID) } catch { /* layout 就绪前极小概率，忽略：侧栏仍可点进 */ }
+    return disposeMain
+  })
 
   // 侧栏入口
   ctx.slots.inject('sidebar.panellist', () =>
@@ -77,13 +83,4 @@ export function apply(ctx: any) {
       { name: 'settings.onboarding', id: 'welcome-notice', priority: -1, locale: NS },
       (props: any) => h(SwallowOnboarding, props),
     ))
-
-  // 打开 web 默认落地 Kinstra Neko 面板。main occupant 挂载晚于 apply，selectPanel
-  // 对未注册 panel 会抛，故重试若干次直到注册就绪。
-  let tries = 0
-  const land = () => {
-    try { ctx.layout?.selectPanel?.(PANEL_ID) }
-    catch { if (++tries < 40) setTimeout(land, 100) }
-  }
-  setTimeout(land, 0)
 }

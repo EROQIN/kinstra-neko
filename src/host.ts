@@ -5,7 +5,8 @@
 // 安全默认：总开关关、试运行开、白名单空——装好不配置一句话都不会发。
 
 import type { Context } from '@deepseek-ai/cordis'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLogger, logBoard } from './core/logger.js'
@@ -67,6 +68,22 @@ export function apply(ctx: Context) {
     }
     return napcat.endpoint()
   }
+
+  // —— 开箱即用：启动期确保有一个默认工作区 ——
+  // 无桌面的 Linux 没有 xdg-user-dir Documents，DSH client 首启自动建默认工作区会失败、
+  // 停在「选择一个工作区开始」。这里启动即建好（路径与 SessionManager 的 QQ 会话工作区一致，
+  // 后者按 path 复用，不会另建）；优先走官方 initializeDefault 让 client 恢复逻辑认得它。
+  void (async () => {
+    try {
+      const reg = (ctx as any).workspaceRegistry
+      if (!reg || reg.list?.().length > 0) return
+      const dir = String(getConfig().workspaceDir || '').trim() || join(homedir(), '.kinstra-neko', 'qq-chats')
+      let ws: any
+      try { ws = await reg.initializeDefault?.(async () => dir) } catch (e) { logger.child('core').debug(`initializeDefault 跳过：${(e as Error).message}`) }
+      if (!ws) { mkdirSync(dir, { recursive: true }); ws = await reg.create(dir, 'Kinstra Neko · QQ') }
+      if (ws) logger.child('core').info(`默认工作区就绪：${ws.path}`)
+    } catch (e) { logger.child('core').warn(`默认工作区创建失败：${(e as Error).message}`) }
+  })()
 
   const memory = new MemoryStore({
     hotGroups: getConfig().memory.hotGroups,
@@ -407,7 +424,7 @@ export function apply(ctx: Context) {
     } catch (error) { return { ok: false, list: [], message: (error as Error).message } }
   })
 
-  log.info(`Kinstra Neko v1.0.0 已加载｜总开关 ${getConfig().enabled ? '开' : '关'}｜试运行 ${getConfig().dryRun ? '开' : '关'}`)
+  log.info(`Kinstra Neko v${PKG_VERSION} 已加载｜总开关 ${getConfig().enabled ? '开' : '关'}｜试运行 ${getConfig().dryRun ? '开' : '关'}`)
 
   return { hub, onebot, getConfig, memory, ready: Promise.resolve() }
 }

@@ -17,7 +17,7 @@ type AnyObj = Record<string, any>
 
 function useStyles() {
   return {
-    page: { padding: '20px 24px', maxWidth: 820, margin: '0 auto', color: 'var(--dsw-color-text, #e8e8ea)', fontSize: 14, lineHeight: 1.6 } as AnyObj,
+    page: { height: '100%', minHeight: 0, boxSizing: 'border-box', overflowY: 'auto', padding: '20px 24px 72px', maxWidth: 920, margin: '0 auto', width: '100%', color: 'var(--dsw-color-text, #e8e8ea)', fontSize: 14, lineHeight: 1.6 } as AnyObj,
     h1: { display: 'flex', alignItems: 'center', gap: 10, fontSize: 22, margin: '0 0 4px' } as AnyObj,
     sub: { opacity: 0.65, marginBottom: 18, fontSize: 13 } as AnyObj,
     tabs: { display: 'flex', gap: 4, borderBottom: '1px solid var(--dsw-color-border, #333)', marginBottom: 18, flexWrap: 'wrap' } as AnyObj,
@@ -218,13 +218,17 @@ function QrLogin({ data, s }: any) {
     phase === 'online'
       ? h('div', { style: { color: '#46d369', fontWeight: 600 } }, `✓ ${text}。接下来：去 DSH 设置填模型 API Key，到「群聊与权限」加白名单群。`)
       : h(Fragment, null,
-          (phase === 'waiting' && img) && h('img', { src: img, width: 200, height: 200, alt: '登录二维码', style: { background: '#fff', padding: 8, borderRadius: 8, display: 'block' } }),
-          phase === 'waiting' && !img && h('div', { style: { ...s.sub, padding: '20px 0' } }, '二维码生成中…'),
+          (phase === 'waiting') && h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '12px 0 4px' } },
+            img
+              ? h('img', { src: img, width: 216, height: 216, alt: '登录二维码', style: { background: '#fff', padding: 10, borderRadius: 10, display: 'block' } })
+              : h('div', { style: { width: 216, height: 216, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' } }, '二维码生成中…'),
+            h('div', { style: { fontSize: 13, opacity: 0.8 } }, '打开手机 QQ → 扫一扫，确认登录的是猫娘小号'),
+          ),
           (phase === 'scanned' || phase === 'initializing') && h('div', { style: { ...s.log, display: 'inline-block', margin: '10px 0' } }, text),
           phase === 'starting' && h('div', { style: { ...s.sub, padding: '12px 0' } }, text),
           (phase === 'stopped' || phase === 'offline' || phase === 'reconnecting' || phase === 'unknown') && h('div', { style: { ...s.sub, padding: '8px 0' } }, text),
           st?.loginError && phase !== 'online' && h('div', { style: { ...s.bad, fontSize: 12, marginTop: 4 } }, st.loginError),
-          h('div', { style: { ...s.row, marginTop: 10 } },
+          phase !== 'starting' && h('div', { style: { ...s.row, marginTop: 10 } },
             h('button', { style: s.btnGhost, onClick: async () => { const r = await api('/napcat/qr/refresh', { method: 'POST' }); if (r?.qrcodeurl) setSt({ ...st, phase: 'waiting', qrcodeurl: r.qrcodeurl }); else if (r?.message) alert(r.message) } }, '刷新二维码'))))
 }
 
