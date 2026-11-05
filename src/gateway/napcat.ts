@@ -42,7 +42,9 @@ export function onebotConfigJson(uin: string, cfg: NapCatConfigView): unknown {
         accessToken: cfg.token, debug: false,
       }],
       httpClients: [],
-      wsServers: [{
+      // 注意：NapCat 4.x 正向 WebSocket 服务端字段是 websocketServers（不是 wsServers），
+      // 写错会被静默忽略、只起 HTTP 不起 WS，群消息事件（走 WS）就收不到（真机踩过）。
+      websocketServers: [{
         name: 'kinstra-ws', enable: true, host: '127.0.0.1', port: cfg.wsPort,
         accessToken: cfg.token, debug: false,
       }],
