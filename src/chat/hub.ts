@@ -259,6 +259,17 @@ export function createHub(opts: HubOptions) {
 
     if (chatId.startsWith('group:')) {
       const gid = chatId.slice(6)
+      // 把她自己说出口的话也回灌进群 transcript：下一轮（@ 或插话）模型才看得到自己刚说过
+      // 什么，不会对同一话题反复回复；这也让 @ 与插话共用同一份连续上下文。
+      if (c.enabled && !c.dryRun) {
+        const spoken = items.filter((i) => i.kind === 'text').map((i) => i.value).join(' ').trim()
+        if (spoken) {
+          const b = groupBuf.get(gid) ?? []
+          b.push({ t: Date.now(), uid: selfId || c.botQQ, nick: 'Neko', text: spoken, at: false, mid: '', replyId: '' })
+          while (b.length > 40) b.shift()
+          groupBuf.set(gid, b)
+        }
+      }
       const now = Date.now()
       const said = (groupSaid.get(gid) ?? []).filter((t) => now - t < 3600_000)
       said.push(now)
